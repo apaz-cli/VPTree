@@ -109,9 +109,8 @@ sort_by_first(VPEntry* entries, size_t n, double (*dist_fn)(const vpt_t first, c
     return sort_by;
 }
 
-inline bool
-VPT_build(VPTree* vpt, vpt_t* data, size_t num_items,
-          double (*dist_fn)(const vpt_t first, const vpt_t second)) {
+void VPT_build(VPTree* vpt, vpt_t* data, size_t num_items,
+               double (*dist_fn)(const vpt_t first, const vpt_t second)) {
     vpt->dist_fn = dist_fn;
     vpt->size = num_items;
 
@@ -133,11 +132,6 @@ VPT_build(VPTree* vpt, vpt_t* data, size_t num_items,
         pointlist[i].item = data[i];
 
     // Hold information about the right node that needs to be created
-    VPNode* parent;
-    VPEntry* toBuild;
-    size_t num_to_build;
-    while (true) {
-    }
 }
 
 inline bool
