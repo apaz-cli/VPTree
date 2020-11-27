@@ -1,7 +1,9 @@
 #ifndef __INCLUDED_MEMDEBUG
 #define __INCLUDED_MEMDEBUG
 
-#define MEMDEBUG 0
+#ifndef MEMDEBUG
+#define MEMDEBUG 1
+#endif
 
 #if MEMDEBUG
 #include <stdbool.h>
@@ -31,14 +33,21 @@ MemAlloc* allocs;
 #define OOM_EXIT_STATUS 11
 #endif
 
-static inline void mempanic(void* badptr, char* message, size_t line, char* file);
-
-static inline void OOM(size_t line, char* file);
+/**********************/
+/* Externally visible */
+/**********************/
 extern void print_heap();
+
+// At some point I may add callbacks to remedy this, but it shouldn't be too hard to just edit this file directly.
+/**************************/
+/* Not Externally visible */
+/**************************/
+static inline void mempanic(void* badptr, char* message, size_t line, char* file);
+static inline void OOM(size_t line, char* file);
 
 static inline void
 mempanic(void* badptr, char* message, size_t line, char* file) {
-    printf("MEMORY PANIC: %s\nPointer: %p\nOn line: %lu\nIn file: %s\n", message, badptr, line, file);
+    printf("MEMORY PANIC: %s\nPointer: %p\nOn line: %lu\nIn file: %s\nAborted.\n", message, badptr, line, file);
     fflush(stdout);
     exit(MEMPANIC_EXIT_STATUS);
 }
@@ -54,12 +63,14 @@ extern void
 print_heap() {
     size_t total_allocated = 0;
     size_t i;
+
+    printf("\n*************\n* HEAP DUMP *\n*************\n");
     for (i = 0; i < num_allocs; i++) {
-        printf("Heap ptr: %p Of size: %lu Allocated in file: %s On line: %lu\n",
+        printf("Heap ptr: %p of size: %lu Allocated in file: %s On line: %lu\n",
                allocs[i].ptr, allocs[i].size, allocs[i].file, allocs[i].line);
         total_allocated += allocs[i].size;
     }
-    printf("Total Heap size: %lu, number of items: %lu\n", total_allocated, num_allocs);
+    printf("\nTotal Heap size: %lu, number of items: %lu\n\n\n", total_allocated, num_allocs);
     fflush(stdout);
 }
 
@@ -72,7 +83,6 @@ alloc_find_index(void* ptr) {
             return i;
         }
     }
-    printf("Failed to find ptr: %p\n", ptr);
     return MEM_FAIL_TO_FIND;
 }
 
@@ -130,7 +140,7 @@ memdebug_malloc(size_t n, size_t line, char* file) {
     if (!ptr) OOM(line, file);
 
     // Print message
-    printf("Malloced a pointer: %p in file: %s on line: %lu\n", ptr, file, line);
+    printf("malloc(%lu) -> %p in %s, line %lu.\n", n, ptr, file, line);
     fflush(stdout);
 
     // Keep a record of it
@@ -147,7 +157,7 @@ extern void*
 memdebug_realloc(void* ptr, size_t n, size_t line, char* file) {
     // Check to make sure the allocation exists, and keep track of the location
     size_t alloc_index = alloc_find_index(ptr);
-    if (alloc_index == num_allocs) {
+    if (alloc_index == MEM_FAIL_TO_FIND) {
         mempanic(ptr, "Tried to realloc() an invalid pointer.", line, file);
     }
 
@@ -156,7 +166,7 @@ memdebug_realloc(void* ptr, size_t n, size_t line, char* file) {
     if (!newptr) OOM(line, file);
 
     // Print message
-    printf("Realloced a pointer: old=%p, new=%p, in file: %s on line: %lu\n", ptr, newptr, file, line);
+    printf("realloc(%p, %lu) -> %p in %s, line %lu.\n", ptr, n, newptr, file, line);
     fflush(stdout);
 
     // Update the record of allocations
@@ -173,7 +183,7 @@ extern void
 memdebug_free(void* ptr, size_t line, char* file) {
     // Check to make sure the allocation exists, and keep track of the location
     size_t alloc_index = alloc_find_index(ptr);
-    if (alloc_index == num_allocs) {
+    if (alloc_index == MEM_FAIL_TO_FIND) {
         mempanic(ptr, "Tried to free() an invalid pointer.", line, file);
     }
 
@@ -181,7 +191,7 @@ memdebug_free(void* ptr, size_t line, char* file) {
     free(ptr);
 
     // Print message
-    printf("Freed a pointer: %p in file: %s on line: %lu\n", ptr, file, line);
+    printf("free(%p) in %s, line %lu.\n", ptr, file, line);
     fflush(stdout);
 
     // Remove from the list of allocations
@@ -192,5 +202,7 @@ memdebug_free(void* ptr, size_t line, char* file) {
 #define realloc(ptr, n) memdebug_realloc(ptr, n, __LINE__, __FILE__)
 #define free(ptr) memdebug_free(ptr, __LINE__, __FILE__)
 
-#endif  // Debug flag
+#else  // MEMDEBUG flag
+void print_heap() {}
+#endif
 #endif  // Include guard
