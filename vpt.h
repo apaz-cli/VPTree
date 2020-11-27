@@ -1,31 +1,17 @@
 #ifndef __VPTree
 #define __VPTree
 
+#include <limits.h>
 #include <math.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <sys/mman.h>
 #include <unistd.h>
 
+#include "log.h"
+
 #ifndef vpt_t
 #define vpt_t void*
-#endif
-
-#define DEBUG 0
-#if DEBUG
-#include <assert.h>
-#include <stdio.h>
-#define LOG(format, message) \
-    printf(format, message); \
-    fflush(stdout);
-
-#define LOGs(message)        \
-    printf("%s\n", message); \
-    fflush(stdout);
-#endif
-#ifndef LOG
-#define LOG(format, message) ;
-#define LOGs(format) ;
 #endif
 
 #define VPT_BUILD_SMALL_THRESHOLD 250
@@ -63,10 +49,19 @@ struct VPNode {  // 40 with vpt_t = void*
     } u;
 };
 
+struct VPTAllocs;
+typedef struct VPTAllocs VPTAllocs;
+struct VPTAllocs {
+    VPNode* buffer;
+    VPTAllocs* next;
+};
+
 struct VPTree {
     VPNode* root;
     size_t size;
-    double (*dist_fn)(const vpt_t first, const vpt_t second);
+    VPTAllocs* allocs;
+    void* extra_data;
+    double (*dist_fn)(void* extra_data, vpt_t first, vpt_t second);
 };
 typedef struct VPTree VPTree;
 
@@ -87,38 +82,41 @@ typedef struct VPBuildStackFrame VPBuildStackFrame;
 /* Sort (Necessary for tree build) */
 /***********************************/
 
-void shellsort(VPEntry* arr, size_t n) {
-    size_t interval, i, j;
-    VPEntry temp;
-    for (interval = n / 2; interval > 0; interval /= 2) {
-        for (i = interval; i < n; i += 1) {
-            temp = arr[i];
-            for (j = i; j >= interval && arr[j - interval].distance > temp.distance; j -= interval) {
-                arr[j] = arr[j - interval];
-            }
-            arr[j] = temp;
-        }
-    }
+#include "vpsort.h"
+
+// TODO find a better way to do this
+static inline VPNode* alloc_VPNode() {
+    LOGs("Allocated node.");
+    return (VPNode*)malloc(sizeof(VPNode));
 }
 
-void __VPT_small_build(VPTree* vpt, vpt_t* data, size_t num_items) {}
+static inline size_t min(size_t x, size_t y) {
+    return x < y ? x : y;
+}
+
+static inline void __VPT_small_build(VPTree* vpt, vpt_t* data, size_t num_items) {
+    size_t i;
+    vpt->root = alloc_VPNode();
+    vpt->root->ulabel = 'l';
+    vpt->root->u.pointlist.size = num_items;
+    vpt->root->u.pointlist.capacity = sizeof(vpt_t) * VPT_BUILD_SMALL_THRESHOLD;
+    vpt->root->u.pointlist.items = (vpt_t*)malloc(vpt->root->u.pointlist.capacity);
+    for (i = 0; i < num_items; i++) {
+        vpt->root->u.pointlist.items[i] = data[i];
+    }
+}
 
 /****************/
 /* Tree Methods */
 /****************/
 
-// TODO find a better way to do this
-VPNode* alloc_VPNode() {
-    LOGs("Allocated node.");
-    return (VPNode*)malloc(sizeof(VPNode));
-}
-
 void VPT_build(VPTree* vpt, vpt_t* data, size_t num_items,
-               double (*dist_fn)(const vpt_t first, const vpt_t second)) {
-    vpt->dist_fn = dist_fn;
+               double (*dist_fn)(void* extra_data, vpt_t first, vpt_t second), void* extra_data) {
     vpt->size = num_items;
+    vpt->dist_fn = dist_fn;
+    vpt->extra_data = extra_data;
 
-    if (num_items < VPT_BUILD_SMALL_THRESHOLD) {
+    if (num_items <= VPT_BUILD_SMALL_THRESHOLD) {
         LOG("Building small tree of size %lu.\n", num_items)
         __VPT_small_build(vpt, data, num_items);
         return;
@@ -150,13 +148,14 @@ void VPT_build(VPTree* vpt, vpt_t* data, size_t num_items,
     for (i = 0; i < num_entries; i++) {
         entry_list[i].item = data[i];
     }
+    LOGs("Entry list copied.");
 
     // Split the list in half using the root as a vantage point.
     // Sort the list by distance to the root
     for (i = 0; i < num_entries; i++)
-        entry_list[i].distance = dist_fn(entry_list[i].item, sort_by);
-    shellsort(entry_list, num_entries);
-    LOGs("Entry list copied and sorted.");
+        entry_list[i].distance = dist_fn(extra_data, entry_list[i].item, sort_by);
+    sort(entry_list, num_entries);
+    LOGs("Entry list sorted.");
 
     // Find median item and record position, splitting the list in (roughly) half.
     // Look backward for identical elements, and go forward until you're free of them.
@@ -178,7 +177,7 @@ void VPT_build(VPTree* vpt, vpt_t* data, size_t num_items,
     vpt->root = newnode;
 
     // Push onto the stack the work that needs to be done to create the left and right of the root.
-    leftstack[0].children = entry_list;
+    leftstack[0].children = left_children;
     leftstack[0].num_children = left_num_children;
     leftstack[0].parent = newnode;
     left_stacksize++;
@@ -228,8 +227,8 @@ void VPT_build(VPTree* vpt, vpt_t* data, size_t num_items,
                 // Sort the entries by the popped node
                 for (i = 0; i < num_entries; i++)
                     entry_list[i].distance =
-                        dist_fn(sort_by, entry_list[i].item);
-                shellsort(entry_list, num_entries);
+                        dist_fn(extra_data, sort_by, entry_list[i].item);
+                sort(entry_list, num_entries);
 
                 // Split the list of entries by the median.
                 right_num_children = num_entries / 2;
@@ -254,7 +253,7 @@ void VPT_build(VPTree* vpt, vpt_t* data, size_t num_items,
 
                 // Push the lists and the relevant information for building the next left and
                 // right of this node onto the stack
-                leftstack[left_stacksize].children = entry_list;
+                leftstack[left_stacksize].children = left_children;
                 leftstack[left_stacksize].num_children = left_num_children;
                 leftstack[left_stacksize].parent = newnode;
                 ++left_stacksize;
@@ -296,8 +295,8 @@ void VPT_build(VPTree* vpt, vpt_t* data, size_t num_items,
                 // Sort the entries by the popped node
                 for (i = 0; i < num_entries; i++)
                     entry_list[i].distance =
-                        dist_fn(sort_by, entry_list[i].item);
-                shellsort(entry_list, num_entries);
+                        dist_fn(extra_data, sort_by, entry_list[i].item);
+                sort(entry_list, num_entries);
 
                 // Split the list of entries by the median.
                 right_num_children = num_entries / 2;
@@ -320,7 +319,7 @@ void VPT_build(VPTree* vpt, vpt_t* data, size_t num_items,
 
                 // Push the lists and the relevant information for building the next left and
                 // right of this node onto the stack
-                leftstack[left_stacksize].children = entry_list;
+                leftstack[left_stacksize].children = left_children;
                 leftstack[left_stacksize].num_children = left_num_children;
                 leftstack[left_stacksize].parent = newnode;
                 ++left_stacksize;
@@ -334,8 +333,6 @@ void VPT_build(VPTree* vpt, vpt_t* data, size_t num_items,
     }
     free(build_buffer);
 }
-
-bool VPT_build_empty(VPTree* vpt, double (*dist_fn)(const vpt_t first, const vpt_t second));
 
 void VPT_destroy(VPTree* vpt) {
     VPNode* toTraverse[VPT_MAX_HEIGHT];
@@ -397,13 +394,75 @@ vpt_t* VPT_teardown(VPTree* vpt) {
 
 void VPT_rebuild(VPTree* vpt) {
     vpt_t* items = VPT_teardown(vpt);
-    VPT_build(vpt, items, vpt->size, vpt->dist_fn);
+    VPT_build(vpt, items, vpt->size, vpt->dist_fn, vpt->extra_data);
 }
 
-vpt_t VPT_nn(VPTree* vpt, vpt_t datapoint);
+static inline void sort_knnlist(VPEntry* arr, size_t n, size_t k) {
+    // Bubble sort k times
+    VPEntry temp;
+    for (size_t its = 0; its < k; its++) {
+        for (size_t i = n - 1; i >= 1; i--) {
+            if (arr[i].distance < arr[i - 1].distance) {
+                temp = arr[i];
+                arr[i] = arr[i - 1];
+                arr[i - 1] = temp;
+            }
+        }
+    }
+}
 
 /* Returns a buffer (that must be freed) of MIN(k, vpt->size) items. */
-vpt_t* VPT_knn(VPTree* vpt, vpt_t datapoint, size_t k);
+vpt_t* VPT_knn(VPTree* vpt, vpt_t datapoint, size_t k) {
+    if (vpt->size == 0 || k == 0) return NULL;
+
+    double tau = INFINITY;
+    VPEntry* knnlist = (VPEntry*)malloc(sizeof(VPEntry) * (k + VPT_BUILD_LIST_THRESHOLD));
+
+    size_t to_traverse_size = 1;
+    size_t to_traverse_cap = 1000;
+    VPNode** to_traverse = (VPNode**)malloc(to_traverse_cap * sizeof(VPNode));
+
+    VPNode* current_node;
+    to_traverse[0] = vpt->root;
+    while (to_traverse_size) {
+        current_node = to_traverse[--to_traverse_size];
+        if (current_node->ulabel == 'b') {
+            
+            double dist = vpt->dist_fn(vpt->extra_data, datapoint, current_node->u.branch.item);
+
+            // Some of tau is inside mu, must check inside
+            if (dist < current_node->u.branch.radius + tau) {
+                // push and left
+            }
+
+            // Some of tau is outside mu, must check outside
+            else if (dist >= current_node->u.branch.radius - tau) {
+                // push and right
+            }
+
+            else {
+            }
+
+            // Update tau
+
+        } else {
+        }
+    }
+
+    vpt_t* knns = (vpt_t*)malloc(sizeof(vpt_t) * min(vpt->size, k));
+    for (size_t i = 0; i < k; i++) {
+        knns[i] = knnlist[i].item;
+    }
+
+    free(knnlist);
+    free(to_traverse);
+
+    return knns;
+}
+
+vpt_t* VPT_nn(VPTree* vpt, vpt_t datapoint) {
+    return VPT_knn(vpt, datapoint, 1);
+}
 
 void VPT_add(VPTree* vpt, vpt_t datapoint) {
     double dist;
@@ -411,14 +470,17 @@ void VPT_add(VPTree* vpt, vpt_t datapoint) {
 
     vpt->size++;
     while (true) {
-        if (current_node->ulabel == 'l') {
+        if (current_node->ulabel == 'l') {  // Add to the list
+            // Increase capacity if necessary
             if (current_node->u.pointlist.size >= current_node->u.pointlist.capacity) {
-            } else {
-                current_node->u.pointlist.items[current_node->u.pointlist.size++] = datapoint;
+                size_t new_capacity = current_node->u.pointlist.capacity * 1.2;
+                current_node->u.pointlist.capacity = new_capacity;
+                current_node->u.pointlist.items = (vpt_t*)realloc(current_node->u.pointlist.items, new_capacity);
             }
-
-        } else {
-            dist = vpt->dist_fn(datapoint, current_node->u.branch.item);
+            // Add the point to the list and increase size
+            current_node->u.pointlist.items[current_node->u.pointlist.size++] = datapoint;
+        } else {  // Traverse to find the list
+            dist = vpt->dist_fn(vpt->extra_data, datapoint, current_node->u.branch.item);
             if (dist <= current_node->u.branch.radius) {
                 current_node = current_node->u.branch.left;
             } else {
