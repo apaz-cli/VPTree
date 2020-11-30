@@ -5,7 +5,7 @@
 
 #include "log.h"
 
-// To appease the linter
+// To appease the linter. This is never active.
 #ifndef __VPTree
 #ifndef vpt_t
 #define vpt_t void*
@@ -17,6 +17,42 @@ struct VPEntry {
 };
 typedef struct VPEntry VPEntry;
 #endif /*__VPTree*/
+
+// Debugging
+#if DEBUG
+void print_list(VPEntry* arr, size_t n) {
+    double* p;
+    double d;
+    printf("[");
+    for (size_t i = 0; i < n - 1; i++) {
+        p = arr[i].item.data;
+        d = arr[i].distance;
+        printf("[%p,%.2f],", p, d);
+    }
+    p = arr[n - 1].item.data;
+    d = arr[n - 1].distance;
+    printf("[%p,%.2f]]\n", p, d);
+}
+
+void assert_sorted(VPEntry* arr, size_t n, vpt_t datapoint, VPTree* tree) {
+    for (size_t i = 1; i < n; i++) {
+        assert(tree->dist_fn(tree->extra_data, arr[i - 1].item, datapoint) == arr[i - 1].distance);
+        assert(tree->dist_fn(tree->extra_data, arr[i].item, datapoint) == arr[i].distance);
+        assert(arr[i - 1].distance <= arr[i].distance);
+    }
+}
+
+void assert_locally_sorted(VPEntry* arr, size_t n) {
+    for (size_t i = 1; i < n; i++) {
+        assert(arr[i - 1].distance <= arr[i].distance);
+    }
+}
+
+#else
+void print_list(VPEntry* arr, size_t n) {}
+void assert_sorted(VPEntry* arr, size_t n, vpt_t datapoint, VPTree* tree) {}
+void assert_locally_sorted(VPEntry* arr, size_t n) {}
+#endif
 
 // Large
 #define MERGESORT 0
@@ -32,7 +68,7 @@ void largesort(VPEntry* arr, size_t n) {
 #define SHELLSORT 0
 #define INSERTIONSORT 1
 #define BUBBLESORT 2
-#define SMALLSORTALG INSERTIONSORT
+#define SMALLSORTALG SHELLSORT
 void shellsort(VPEntry* arr, size_t n);
 void insersort(VPEntry* arr, size_t n);
 void bubblsort(VPEntry* arr, size_t n);
@@ -46,7 +82,7 @@ void smallsort(VPEntry* arr, size_t n) {
 #endif
 }
 
-#define SORT_THRESHOLD 200
+#define SORT_THRESHOLD 2000
 void sort(VPEntry* arr, size_t n) {
     if (n < SORT_THRESHOLD) {
         smallsort(arr, n);
@@ -71,10 +107,6 @@ void* __mergesort_subsort(void* sublist) {
     return NULL;
 }
 void mergesort(VPEntry* arr, size_t n) {
-#if DEBUG
-    printf("Sorting array %p of size %lu.\n", arr, n);
-#endif
-
     const size_t num_threads = MERGESORT_NUM_THREADS;
     pthread_t threadpool[num_threads - 1];
     size_t each = n / num_threads;
@@ -121,15 +153,6 @@ void mergesort(VPEntry* arr, size_t n) {
         }
     }
 
-#if DEBUG
-    // Assert subarrays are sorted now that threads are joined
-    for (i = 0; i < num_threads; i++) {
-        for (j = 1; j < sublists[i].n; j++) {
-            assert(sublists[i].arr[j - 1].distance <= sublists[i].arr[j].distance);
-        }
-    }
-#endif
-
     big.distance = INFINITY;
 
     // Merge the arrays
@@ -144,38 +167,10 @@ void mergesort(VPEntry* arr, size_t n) {
         }
         mergepos[smallest_idx]++;
         scratch_space[i] = smallest;
-#if DEBUG
-        /*
-        printf("i: %lu, smallest_idx=%lu, mergepos=[%lu", i, smallest_idx, mergepos[0]);
-        for (j = 1; j < num_threads; j++) {
-            printf(",%lu", mergepos[j]);
-        }
-        printf("]\n");
-        fflush(stdout);
-        */
-#endif
     }
-#if DEBUG
-
-    printf("%lu\n", n);
-    printf("Sublist lengths: [%lu", sublists[0].n);
-    for (i = 1; i < num_threads; i++) {
-        printf(",%lu", sublists[i].n);
-    }
-    printf("]\n");
-    fflush(stdout);
-#endif
-
     // Copy the list back into the array. Debug = 1 in "vpt.h" to assert that the array is getting sorted.
     memcpy(arr, scratch_space, n * sizeof(VPEntry));
     free(scratch_space);
-
-#if DEBUG
-    // Assert that the list was indeed sorted
-    for (i = 1; i < n; i++) {
-        assert(arr[i - 1].distance <= arr[i].distance);
-    }
-#endif
 }
 
 /***************/

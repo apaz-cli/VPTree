@@ -1,7 +1,9 @@
 #ifndef __LOG
 #define __LOG
 
-#define DEBUG 0
+#ifndef DEBUG
+#define DEBUG 1
+#endif
 
 #if DEBUG
 #include <assert.h>
@@ -24,10 +26,9 @@ void debug_printf(const char *fmt, ...) {
 }
 
 #else
-void debug_printf(const char *fmt, ...) {}
-#endif
-#ifndef LOG
 #define LOG(format, message) ;
 #define LOGs(format) ;
+void debug_printf(const char *fmt, ...) {}
 #endif
-#endif
+
+#endif  // Include guard

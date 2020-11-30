@@ -5,7 +5,6 @@
 #include <math.h>
 #include <stdbool.h>
 #include <stdlib.h>
-#include <sys/mman.h>
 #include <unistd.h>
 
 #include "log.h"
@@ -397,97 +396,138 @@ void VPT_rebuild(VPTree* vpt) {
     VPT_build(vpt, items, vpt->size, vpt->dist_fn, vpt->extra_data);
 }
 
-static inline void sort_knnlist(VPEntry* arr, size_t n, size_t k) {
-    // Bubble sort k times
+// Sorts a single element into position from just outside the list.
+// Not suitable for knn. Operates on a list that has already been constructed sorted.
+static inline void
+knnlist_push(VPEntry* knnlist, size_t knnlist_size, VPEntry to_add) {
+    // Put the item right outside the list
+    knnlist[knnlist_size] = to_add;
+
+    // Shift the item inwards
     VPEntry temp;
-    for (size_t its = 0; its < k; its++) {
-        for (size_t i = n - 1; i >= 1; i--) {
-            if (arr[i].distance < arr[i - 1].distance) {
-                temp = arr[i];
-                arr[i] = arr[i - 1];
-                arr[i - 1] = temp;
-            }
+    size_t n = knnlist_size;
+    do {
+        if (knnlist[n].distance < knnlist[n - 1].distance) {
+            temp = knnlist[n];
+            knnlist[n] = knnlist[n - 1];
+            knnlist[n - 1] = temp;
+            print_list(knnlist, knnlist_size);
+        } else {
+            return;
         }
-    }
+        n--;
+    } while (n >= 1);
+
+    assert_locally_sorted(knnlist, knnlist_size);
+}
+
+// Unlike the last function, this is a real knn on a list.
+static inline void
+list_knn(VPEntry* knnlist, size_t knnlist_size, size_t k, vpt_t* vplist, double* vplist_distances, size_t vplist_size) {
 }
 
 /* Returns a buffer (that must be freed) of MIN(k, vpt->size) items. */
-vpt_t* VPT_knn(VPTree* vpt, vpt_t datapoint, size_t k) {
+VPEntry* VPT_knn(VPTree* vpt, vpt_t datapoint, size_t k) {
     if (vpt->size == 0 || k == 0) return NULL;
 
-    double tau = INFINITY;
+    size_t knnlist_size = 0;
     VPEntry* knnlist = (VPEntry*)malloc(sizeof(VPEntry) * (k + VPT_BUILD_LIST_THRESHOLD));
 
-    size_t to_traverse_size = 1;
-    size_t to_traverse_cap = 1000;
-    VPNode** to_traverse = (VPNode**)malloc(to_traverse_cap * sizeof(VPNode));
+    // The largest distance to a knn
+    double tau = INFINITY;
 
+    // Scratch space for processing vplist distances
+    double vplist_distances[VPT_BUILD_LIST_THRESHOLD];
+
+    // Traverse the tree
+    size_t to_traverse_size = 1;
+    VPNode* to_traverse[VPT_MAX_HEIGHT];
     VPNode* current_node;
     to_traverse[0] = vpt->root;
     while (to_traverse_size) {
+        // Pop a node from the stack
         current_node = to_traverse[--to_traverse_size];
+
+        // Node is a branch
         if (current_node->ulabel == 'b') {
-            
+            // Calculate the distance between this branch node and the target point.
+            VPEntry current;
+            current.item = current_node->u.branch.item;
             double dist = vpt->dist_fn(vpt->extra_data, datapoint, current_node->u.branch.item);
+            current.distance = dist;
 
-            // Some of tau is inside mu, must check inside
-            if (dist < current_node->u.branch.radius + tau) {
-                // push and left
-            }
+            // Push the node we're visiting onto the list of candidates, then update tau and the size of said list.
+            knnlist_push(knnlist, knnlist_size, current);  // Minimal to no actual sorting
+            tau = knnlist[knnlist_size].distance;
+            knnlist_size = min(knnlist_size + 1, k);  // No branch on both x86 and ARM
 
-            // Some of tau is outside mu, must check outside
-            else if (dist >= current_node->u.branch.radius - tau) {
-                // push and right
-            }
+            // Debugging functions. These do nothing and don't show up in the binary.
+            // print_list(knnlist, knnlist_size);
+            assert_sorted(knnlist, knnlist_size, datapoint, vpt);
 
-            else {
-            }
-
-            // Update tau
-
-        } else {
-        }
-    }
-
-    vpt_t* knns = (vpt_t*)malloc(sizeof(vpt_t) * min(vpt->size, k));
-    for (size_t i = 0; i < k; i++) {
-        knns[i] = knnlist[i].item;
-    }
-
-    free(knnlist);
-    free(to_traverse);
-
-    return knns;
-}
-
-vpt_t* VPT_nn(VPTree* vpt, vpt_t datapoint) {
-    return VPT_knn(vpt, datapoint, 1);
-}
-
-void VPT_add(VPTree* vpt, vpt_t datapoint) {
-    double dist;
-    VPNode* current_node = vpt->root;
-
-    vpt->size++;
-    while (true) {
-        if (current_node->ulabel == 'l') {  // Add to the list
-            // Increase capacity if necessary
-            if (current_node->u.pointlist.size >= current_node->u.pointlist.capacity) {
-                size_t new_capacity = current_node->u.pointlist.capacity * 1.2;
-                current_node->u.pointlist.capacity = new_capacity;
-                current_node->u.pointlist.items = (vpt_t*)realloc(current_node->u.pointlist.items, new_capacity);
-            }
-            // Add the point to the list and increase size
-            current_node->u.pointlist.items[current_node->u.pointlist.size++] = datapoint;
-        } else {  // Traverse to find the list
-            dist = vpt->dist_fn(vpt->extra_data, datapoint, current_node->u.branch.item);
-            if (dist <= current_node->u.branch.radius) {
-                current_node = current_node->u.branch.left;
+            // Keep track of the parts of the tree that could still have nearest neighbors, and push
+            // them onto the traversal stack. Keep doing this until we run out of tree to traverse.
+            if (dist < current_node->u.branch.radius) {
+                if (dist - tau <= current_node->u.branch.radius) {
+                    to_traverse[to_traverse_size++] = current_node->u.branch.left;
+                }
+                if (dist + tau >= current_node->u.branch.radius) {
+                    to_traverse[to_traverse_size++] = current_node->u.branch.right;
+                }
             } else {
-                current_node = current_node->u.branch.right;
+                if (dist + tau >= current_node->u.branch.radius) {
+                    to_traverse[to_traverse_size++] = current_node->u.branch.right;
+                }
+                if (dist - tau <= current_node->u.branch.radius) {
+                    to_traverse[to_traverse_size++] = current_node->u.branch.left;
+                }
             }
         }
+
+        // Node is a list
+        else {
+            vpt_t* vplist = current_node->u.pointlist.items;
+            size_t vplist_size = current_node->u.pointlist.size;
+
+            for (size_t i = 0; i < vplist_size; i++) {
+                vplist_distances[i] = vpt->dist_fn(vpt->extra_data, datapoint, vplist[i]);
+            }
+
+            debug_printf("Before list knn\n");
+            print_list(knnlist, knnlist_size);
+
+            // Update the new k nearest neighbors
+            // 1. Break off the first k elements of the array (Already done)
+            // 2. Sort the first k elements (they happen to have already been constructed sorted)
+            // 3. Keep track of the largest of the k items (They're sorted, so we know where it is)
+            double largest_k_dist = knnlist[knnlist_size - 1].distance;
+
+            // 4. Iterate over the rest of the list. If the visited element is less than the
+            // largest element of the first k, swap it in and shift it into place so the list
+            // stays sorted. Then update the largest element.
+            VPEntry entry;
+            for (size_t i = 0; i < vplist_size; i++) {
+                entry.item = vplist[i];
+                entry.distance = vplist_distances[i];
+
+                if (vplist_distances[i] < largest_k_dist) {
+                    knnlist_push(knnlist, knnlist_size, entry);
+                    knnlist_size = min(knnlist_size + 1, k);
+
+                    largest_k_dist = knnlist[knnlist_size - 1].distance;
+                }
+            }
+
+            // Debugging functions. These do nothing and don't show up in the binary.
+            assert_sorted(knnlist, knnlist_size, datapoint, vpt);
+        }
     }
+
+    return realloc(knnlist, sizeof(VPEntry) * min(k, knnlist_size));
+}
+
+VPEntry* VPT_nn(VPTree* vpt, vpt_t datapoint) {
+    return VPT_knn(vpt, datapoint, 1);
 }
 
 #endif

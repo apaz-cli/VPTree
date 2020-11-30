@@ -157,7 +157,7 @@ extern void*
 memdebug_realloc(void* ptr, size_t n, size_t line, char* file) {
     // Check to make sure the allocation exists, and keep track of the location
     size_t alloc_index = alloc_find_index(ptr);
-    if (alloc_index == MEM_FAIL_TO_FIND) {
+    if (ptr != NULL && alloc_index == MEM_FAIL_TO_FIND) {
         mempanic(ptr, "Tried to realloc() an invalid pointer.", line, file);
     }
 
@@ -183,7 +183,7 @@ extern void
 memdebug_free(void* ptr, size_t line, char* file) {
     // Check to make sure the allocation exists, and keep track of the location
     size_t alloc_index = alloc_find_index(ptr);
-    if (alloc_index == MEM_FAIL_TO_FIND) {
+    if (ptr != NULL && alloc_index == MEM_FAIL_TO_FIND) {
         mempanic(ptr, "Tried to free() an invalid pointer.", line, file);
     }
 
