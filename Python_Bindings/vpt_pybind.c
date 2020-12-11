@@ -2,17 +2,19 @@
 #include <Python.h>
 
 #define vpt_t PyObject*
-#include "vpt.h"
+#include "../vpt.h"
 
 struct PyVPTree {
     PyObject_HEAD head;
     VPTree vpt;
 };
 
-double PyObject_distance_fptr(const void* extra_data, vpt_t first, vpt_t second) {
-    // Call CURRENT_COMPARATOR and marshall the result into a double
+double PyObject_distance_fptr(const void* extra_data, PyObject* first, PyObject* second) {
     PyObject* dist_fn = (PyObject*)extra_data;
-    return 0.0;
+    PyObject* args = PyTuple_Pack(2, first, second);
+    PyObject* eval_result = PyObject_CallObject(dist_fn, args);
+    double result = PyFloat_AS_DOUBLE(eval_result);
+    return result;
 }
 
 static PyObject*
@@ -55,4 +57,8 @@ PYVPT_build(PyObject* data, PyObject* dist_fn) {
 
 static inline PyObject*
 PYVPT_create(VPTree* vpt, vpt_t* data, size_t num, PyObject* dist_fn, PyGILState_STATE gil) {
+}
+
+PyObject*
+PyVPT_nn(VPTree* vpt, PyObject* datapoint) {
 }

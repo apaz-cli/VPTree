@@ -2,6 +2,7 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "log.h"
 
@@ -25,11 +26,11 @@ void print_list(VPEntry* arr, size_t n) {
     double d;
     printf("[");
     for (size_t i = 0; i < n - 1; i++) {
-        p = arr[i].item.data;
+        p = arr[i].item;
         d = arr[i].distance;
         printf("[%p,%.2f],", p, d);
     }
-    p = arr[n - 1].item.data;
+    p = arr[n - 1].item;
     d = arr[n - 1].distance;
     printf("[%p,%.2f]]\n", p, d);
 }

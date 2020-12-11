@@ -9,7 +9,8 @@
 #define DEBUG 0
 #include "log.h"
 
-#define MEMDEBUG 0
+#define MEMDEBUG 1
+#define PRINT_MEMALLOCS 0
 #include "memdebug.h"
 
 #define VECDIM 64
@@ -77,14 +78,18 @@ void knn_test(size_t k) {
     printf("Built tree.\n");
 
     VPEntry* knns = VPT_knn(&vpt, entries[0], k);
-    printf("Nearest Neighbors to: ");
-    print_VEC(entries);
+    printf("Finished KNN.\n");
+    printf("Nearest Neighbors to: "); print_VEC(entries);
     for (size_t i = 0; i < k; i++) {
         printf("dist: %f, ", knns[i].distance);
         print_VEC(&(knns[i].item));
     }
+    free(knns);
+    
+    VPT_destroy(&vpt);
+    free(entries);
 
-    printf("Finished KNN.\n");
+    print_heap();
 }
 
 void build_destroy_test() {

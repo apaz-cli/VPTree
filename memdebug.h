@@ -5,6 +5,14 @@
 #define MEMDEBUG 1
 #endif
 
+// Used to control debug error messages for every allocation.
+// Still wraps malloc() and tracks allocations for print_heap() if this is off/
+#if MEMDEBUG
+#ifndef PRINT_MEMALLOCS
+#define PRINT_MEMALLOCS 1
+#endif
+#endif
+
 #if MEMDEBUG
 #include <stdbool.h>
 #include <stdio.h>
@@ -139,9 +147,11 @@ memdebug_malloc(size_t n, size_t line, char* file) {
     void* ptr = malloc(n);
     if (!ptr) OOM(line, file);
 
+#if PRINT_MEMALLOCS
     // Print message
     printf("malloc(%lu) -> %p in %s, line %lu.\n", n, ptr, file, line);
     fflush(stdout);
+#endif
 
     // Keep a record of it
     MemAlloc newalloc;
@@ -165,9 +175,11 @@ memdebug_realloc(void* ptr, size_t n, size_t line, char* file) {
     void* newptr = realloc(ptr, n);
     if (!newptr) OOM(line, file);
 
+#if PRINT_MEMALLOCS
     // Print message
     printf("realloc(%p, %lu) -> %p in %s, line %lu.\n", ptr, n, newptr, file, line);
     fflush(stdout);
+#endif
 
     // Update the record of allocations
     MemAlloc newalloc;
@@ -190,9 +202,11 @@ memdebug_free(void* ptr, size_t line, char* file) {
     // Call free()
     free(ptr);
 
+#if PRINT_MEMALLOCS
     // Print message
     printf("free(%p) in %s, line %lu.\n", ptr, file, line);
     fflush(stdout);
+#endif
 
     // Remove from the list of allocations
     alloc_remove(alloc_index);
@@ -203,6 +217,10 @@ memdebug_free(void* ptr, size_t line, char* file) {
 #define free(ptr) memdebug_free(ptr, __LINE__, __FILE__)
 
 #else  // MEMDEBUG flag
+/*************************************************************************************/
+/* Define externally visible functions to do nothing when debugging flag is disabled */
+/*************************************************************************************/
+
 void print_heap() {}
 #endif
 #endif  // Include guard
