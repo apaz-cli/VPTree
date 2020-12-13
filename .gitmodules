@@ -1,6 +1,3 @@
 [submodule "memdebug.h"]
 	path = memdebug.h
 	url = https://github.com/apaz-cli/memdebug.h.git
-[submodule "threadpool.h"]
-	path = threadpool.h
-	url = https://github.com/apaz-cli/threadpool.h.git
