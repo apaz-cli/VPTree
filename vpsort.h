@@ -84,7 +84,7 @@ void smallsort(VPEntry* arr, size_t n) {
 }
 
 #define SORT_THRESHOLD 2000
-void sort(VPEntry* arr, size_t n) {
+void VPSort(VPEntry* arr, size_t n) {
     if (n < SORT_THRESHOLD) {
         smallsort(arr, n);
     } else {

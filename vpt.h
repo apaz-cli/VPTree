@@ -184,7 +184,7 @@ void VPT_build(VPTree* vpt, vpt_t* data, size_t num_items,
     // Sort the list by distance to the root
     for (i = 0; i < num_entries; i++)
         entry_list[i].distance = dist_fn(extra_data, entry_list[i].item, sort_by);
-    sort(entry_list, num_entries);
+    VPSort(entry_list, num_entries);
     LOGs("Entry list sorted.");
 
     // Find median item and record position, splitting the list in (roughly) half.
@@ -258,7 +258,7 @@ void VPT_build(VPTree* vpt, vpt_t* data, size_t num_items,
                 for (i = 0; i < num_entries; i++)
                     entry_list[i].distance =
                         dist_fn(extra_data, sort_by, entry_list[i].item);
-                sort(entry_list, num_entries);
+                VPSort(entry_list, num_entries);
 
                 // Split the list of entries by the median.
                 right_num_children = num_entries / 2;
@@ -326,7 +326,7 @@ void VPT_build(VPTree* vpt, vpt_t* data, size_t num_items,
                 for (i = 0; i < num_entries; i++)
                     entry_list[i].distance =
                         dist_fn(extra_data, sort_by, entry_list[i].item);
-                sort(entry_list, num_entries);
+                VPSort(entry_list, num_entries);
 
                 // Split the list of entries by the median.
                 right_num_children = num_entries / 2;
