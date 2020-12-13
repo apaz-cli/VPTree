@@ -11,7 +11,7 @@
 
 #define MEMDEBUG 1
 #define PRINT_MEMALLOCS 0
-#include "memdebug.h"
+#include "memdebug.h/memdebug.h"
 
 #define VECDIM 64
 #include "vec.h"
