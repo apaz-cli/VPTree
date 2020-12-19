@@ -492,10 +492,12 @@ VPEntry* VPT_knn(VPTree* vpt, vpt_t datapoint, size_t k) {
             current.item = current_node->u.branch.item;
             current.distance = dist;
 
-            // Push the node we're visiting onto the list of candidates, then update tau and the size of said list.
+            // Push the node we're visiting onto the list of candidates
             knnlist_push(knnlist, knnlist_size, current);  // Minimal to no actual sorting
-            tau = knnlist[knnlist_size].distance;
-            knnlist_size = min(knnlist_size + 1, k);  // No branch on both x86 and ARM
+            knnlist_size = min(knnlist_size + 1, k);       // No branch on both x86 and ARM
+
+            // Update tau
+            tau = knnlist[knnlist_size - 1].distance;
 
             // Debugging functions. These do nothing and don't show up in the binary.
             // print_list(knnlist, knnlist_size);
@@ -552,8 +554,8 @@ VPEntry* VPT_knn(VPTree* vpt, vpt_t datapoint, size_t k) {
                 }
             }
 
-            // Debugging functions. These do nothing and don't show up in the binary.
-            
+            // There's no need to update tau. We don't need it to do list knn, 
+            // and it's always updated right before it's needed.
         }
     }
 
