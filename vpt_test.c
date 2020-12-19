@@ -9,11 +9,11 @@
 #define DEBUG 0
 #include "log.h"
 
-#define MEMDEBUG 1
-#define PRINT_MEMALLOCS 0
+#define MEMDEBUG 0
+#define PRINT_MEMALLOCS 1
 #include "memdebug.h/memdebug.h"
 
-#define VECDIM 64
+#define VECDIM 16
 #include "vec.h"
 
 #define vpt_t VEC
@@ -36,7 +36,7 @@ assert_in_range(VEC* entries, size_t num) {
     }
 }
 #else
-static inline void assert_in_range(VEC* entries, size_t num) {}
+static inline void assert_in_range(VEC* entries, size_t num) { (void)entries; (void)num; }
 #endif
 
 static inline void

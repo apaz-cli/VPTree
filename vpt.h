@@ -99,6 +99,7 @@ alloc_VPNode(VPTree* vpt) {
     if (alloc_list->size == NODEALLOC_BUF_SIZE - 1) {
         // Create an empty list and point it at the vptree's.
         NodeAllocs* new_list = (NodeAllocs*)malloc(sizeof(NodeAllocs));
+        if (!new_list) return NULL;
         new_list->size = 0;
         new_list->next = vpt->node_allocs;
 
@@ -120,36 +121,40 @@ min(size_t x, size_t y) {
     return x < y ? x : y;
 }
 
-static inline void
+static inline bool
 __VPT_small_build(VPTree* vpt, vpt_t* data, size_t num_items) {
     size_t i;
     vpt->root = alloc_VPNode(vpt);
+    if (!vpt->root) return NULL;
     vpt->root->ulabel = 'l';
     vpt->root->u.pointlist.size = num_items;
     vpt->root->u.pointlist.capacity = sizeof(vpt_t) * VPT_BUILD_SMALL_THRESHOLD;
     vpt->root->u.pointlist.items = (vpt_t*)malloc(vpt->root->u.pointlist.capacity);
+    if (!vpt->root->u.pointlist.items) return NULL;
     for (i = 0; i < num_items; i++) {
         vpt->root->u.pointlist.items[i] = data[i];
     }
+    return true;
 }
 
 /****************/
 /* Tree Methods */
 /****************/
 
-void VPT_build(VPTree* vpt, vpt_t* data, size_t num_items,
+bool VPT_build(VPTree* vpt, vpt_t* data, size_t num_items,
                double (*dist_fn)(void* extra_data, vpt_t first, vpt_t second), void* extra_data) {
+    if (num_items == 0) return NULL;
     vpt->size = num_items;
     vpt->dist_fn = dist_fn;
     vpt->extra_data = extra_data;
     vpt->node_allocs = (NodeAllocs*)malloc(sizeof(NodeAllocs));
+    if (!vpt->node_allocs) return NULL;
     vpt->node_allocs->size = 0;
     vpt->node_allocs->next = NULL;
 
     if (num_items <= VPT_BUILD_SMALL_THRESHOLD) {
         LOG("Building small tree of size %lu.\n", num_items)
-        __VPT_small_build(vpt, data, num_items);
-        return;
+        return __VPT_small_build(vpt, data, num_items);
     }
     LOG("Building large tree of size %lu.\n", num_items)
 
@@ -201,6 +206,7 @@ void VPT_build(VPTree* vpt, vpt_t* data, size_t num_items,
 
     // Set the node.
     newnode = alloc_VPNode(vpt);
+    if (!newnode) return NULL;
     newnode->ulabel = 'b';
     newnode->u.branch.item = sort_by;
     newnode->u.branch.radius = (right_children - 1)->distance;
@@ -235,6 +241,7 @@ void VPT_build(VPTree* vpt, vpt_t* data, size_t num_items,
                 // Find a smarter way to allocate memory than by peppering the heap
                 // with like 5 million individually allocated nodes
                 newnode = alloc_VPNode(vpt);
+                if (!newnode) return NULL;
                 newnode->ulabel = 'l';
                 newnode->u.pointlist.size = newnode->u.pointlist.capacity = popped.num_children;
                 newnode->u.pointlist.items = (vpt_t*)malloc(popped.num_children * sizeof(vpt_t));
@@ -248,6 +255,7 @@ void VPT_build(VPTree* vpt, vpt_t* data, size_t num_items,
             // Inductive case, build node and push more information
             else {
                 newnode = alloc_VPNode(vpt);
+                if (!newnode) return NULL;
 
                 // Pop the first child off the list and into the new node
                 sort_by = popped.children[0].item;
@@ -302,6 +310,8 @@ void VPT_build(VPTree* vpt, vpt_t* data, size_t num_items,
 
             if (popped.num_children < VPT_BUILD_LIST_THRESHOLD) {
                 newnode = alloc_VPNode(vpt);
+                if (!newnode) return NULL;
+
                 newnode->ulabel = 'l';
                 newnode->u.pointlist.size = popped.num_children;
                 newnode->u.pointlist.capacity = popped.num_children;
@@ -316,6 +326,7 @@ void VPT_build(VPTree* vpt, vpt_t* data, size_t num_items,
             // Inductive case, build node and push more information
             else {
                 newnode = alloc_VPNode(vpt);
+                if (!newnode) return NULL;
 
                 // Pop the first child off the list and into the new node
                 sort_by = popped.children[0].item;
@@ -362,6 +373,7 @@ void VPT_build(VPTree* vpt, vpt_t* data, size_t num_items,
         }
     }
     free(build_buffer);
+    return true;
 }
 
 void VPT_destroy(VPTree* vpt) {
@@ -384,6 +396,11 @@ void VPT_destroy(VPTree* vpt) {
 vpt_t* VPT_teardown(VPTree* vpt) {
     size_t all_size = 0;
     vpt_t* all_items = (vpt_t*)malloc(sizeof(vpt_t) * vpt->size);
+    if (!all_items) {
+        LOGs("Failed to allocate memory to store data from the tree. Cannot return items, tearing down instead.");
+        VPT_destroy(vpt);
+        return NULL;
+    }
 
     NodeAllocs* alloc_list = vpt->node_allocs;
     while (alloc_list) {
@@ -412,7 +429,9 @@ vpt_t* VPT_teardown(VPTree* vpt) {
 }
 
 void VPT_rebuild(VPTree* vpt) {
+    LOGs("Reclaiming items from tree.");
     vpt_t* items = VPT_teardown(vpt);
+    LOGs("Rebuilding tree.");
     VPT_build(vpt, items, vpt->size, vpt->dist_fn, vpt->extra_data);
     free(items);
 }
@@ -421,7 +440,7 @@ void VPT_rebuild(VPTree* vpt) {
 // Not suitable for knn. Operates on a list that has already been constructed sorted.
 static inline void
 knnlist_push(VPEntry* knnlist, size_t knnlist_size, VPEntry to_add) {
-    // Put the item right outside the list
+    // Put the item right outside the list. We have allocated beyond the list, so this is okay.
     knnlist[knnlist_size] = to_add;
 
     // Shift the item inwards
@@ -442,17 +461,13 @@ knnlist_push(VPEntry* knnlist, size_t knnlist_size, VPEntry to_add) {
     assert_locally_sorted(knnlist, knnlist_size);
 }
 
-// Unlike the last function, this is a real knn on a list.
-static inline void
-list_knn(VPEntry* knnlist, size_t knnlist_size, size_t k, vpt_t* vplist, double* vplist_distances, size_t vplist_size) {
-}
-
-/* Returns a buffer (that must be freed) of MIN(k, vpt->size) items. */
+/* Returns a buffer (that must be freed) of MIN(k, vpt->size) items. Returns NULL if failed. */
 VPEntry* VPT_knn(VPTree* vpt, vpt_t datapoint, size_t k) {
     if (vpt->size == 0 || k == 0) return NULL;
 
     size_t knnlist_size = 0;
     VPEntry* knnlist = (VPEntry*)malloc(sizeof(VPEntry) * (k + VPT_BUILD_LIST_THRESHOLD));
+    if (!knnlist) return NULL;
 
     // The largest distance to a knn
     double tau = INFINITY;
@@ -472,9 +487,9 @@ VPEntry* VPT_knn(VPTree* vpt, vpt_t datapoint, size_t k) {
         // Node is a branch
         if (current_node->ulabel == 'b') {
             // Calculate the distance between this branch node and the target point.
+            double dist = vpt->dist_fn(vpt->extra_data, datapoint, current_node->u.branch.item);
             VPEntry current;
             current.item = current_node->u.branch.item;
-            double dist = vpt->dist_fn(vpt->extra_data, datapoint, current_node->u.branch.item);
             current.distance = dist;
 
             // Push the node we're visiting onto the list of candidates, then update tau and the size of said list.
@@ -517,6 +532,7 @@ VPEntry* VPT_knn(VPTree* vpt, vpt_t datapoint, size_t k) {
             // Update the new k nearest neighbors
             // 1. Break off the first k elements of the array (Already done)
             // 2. Sort the first k elements (they happen to have already been constructed sorted)
+            assert_sorted(knnlist, knnlist_size, datapoint, vpt);
             // 3. Keep track of the largest of the k items (They're sorted, so we know where it is)
             double largest_k_dist = knnlist[knnlist_size - 1].distance;
 
@@ -537,7 +553,7 @@ VPEntry* VPT_knn(VPTree* vpt, vpt_t datapoint, size_t k) {
             }
 
             // Debugging functions. These do nothing and don't show up in the binary.
-            assert_sorted(knnlist, knnlist_size, datapoint, vpt);
+            
         }
     }
 
@@ -545,7 +561,74 @@ VPEntry* VPT_knn(VPTree* vpt, vpt_t datapoint, size_t k) {
 }
 
 VPEntry* VPT_nn(VPTree* vpt, vpt_t datapoint) {
-    return VPT_knn(vpt, datapoint, 1);
-}
+    double dist;
+    vpt_t* closest;
+    double closest_dist = INFINITY;
 
+    size_t to_traverse_size = 1;
+    VPNode* to_traverse[VPT_MAX_HEIGHT];
+    VPNode* current_node;
+    to_traverse[0] = vpt->root;
+
+    // Traverse the tree
+    while (to_traverse_size) {
+        // Pop a node from the stack
+        current_node = to_traverse[--to_traverse_size];
+
+        // If branch
+        if (current_node->ulabel == 'b') {
+            // Calculate and consider this item's distance
+            dist = vpt->dist_fn(vpt->extra_data, datapoint, current_node->u.branch.item);
+
+            // Update new closest
+            if (dist < closest_dist) {
+                debug_printf("Found new nearest neighbor: %f at %p.\n", closest_dist, closest);
+                closest_dist = dist;
+                closest = &(current_node->u.branch.item);
+            }
+
+            // Recurse down the tree
+            if (dist < current_node->u.branch.radius) {
+                if (dist - closest_dist <= current_node->u.branch.radius) {
+                    to_traverse[to_traverse_size++] = current_node->u.branch.left;
+                }
+                if (dist + closest_dist >= current_node->u.branch.radius) {
+                    to_traverse[to_traverse_size++] = current_node->u.branch.right;
+                }
+            } else {
+                if (dist + closest_dist >= current_node->u.branch.radius) {
+                    to_traverse[to_traverse_size++] = current_node->u.branch.right;
+                }
+                if (dist - closest_dist <= current_node->u.branch.radius) {
+                    to_traverse[to_traverse_size++] = current_node->u.branch.left;
+                }
+            }
+        }
+        // If pointlist
+        else {
+            size_t listsize = vpt->root->u.pointlist.size;
+            vpt_t* pointlist = vpt->root->u.pointlist.items;
+
+            // Search for smaller items in the list
+            for (size_t i = 0; i < listsize; i++) {
+                dist = vpt->dist_fn(vpt->extra_data, datapoint, pointlist[i]);
+
+                if (dist < closest_dist) {
+                    debug_printf("Found new nearest neighbor: %f at %p.\n", closest_dist, closest);
+                    closest_dist = dist;
+                    closest = pointlist + i;
+                }
+            }
+        }
+    }
+
+    VPEntry* ret = (VPEntry*)malloc(sizeof(VPEntry));
+    if (!ret) {
+        LOGs("Failed to allocate memory for the result. Returning NULL instead.");
+        return NULL;
+    }
+    ret->distance = closest_dist;
+    ret->item = *(closest);
+    return ret;
+}
 #endif

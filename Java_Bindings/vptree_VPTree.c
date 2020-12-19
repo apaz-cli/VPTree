@@ -16,12 +16,25 @@ extern "C" {
 typedef struct JVPTree {
     VPTree vpt;
     JNIEnv* env;
-    jobject dist_fn;
+    jobject this;
+
+    jmethodID dist_fn_ID;
+    jfieldID entry_dist_ID;
+    jfieldID entry_item_ID;
 };
 typedef struct JVPTree JVPTree;
 
 double JVPTree_dist_fn(void* extra_data, jobject first, jobject second) {
     JVPTree dist_fn = *((JVPTree*)extra_data);
+}
+
+double jdistfn(void* extra_data, jobject first, jobject second) {
+    JNIEnv* env = ((JVPTree*)extra_data)->env;
+    jmethodID comparatorID = ((JVPTree*)extra_data)->dist_fn_ID;
+    jobject this = ((JVPTree*)extra_data)->this;
+
+    jdouble result = (*env)->CallDoubleMethod(env, this, comparatorID, first, second);
+    return (double)result;
 }
 
 /******************/
@@ -87,11 +100,29 @@ JNIEXPORT void JNICALL Java_vptree_VPTree_VPT_1build(JNIEnv* env, jobject this, 
         return;
     }
 
-    // Fix the distance function in memory, such that if GC runs between the
-    // evaluation of this native method and the other methods, we still have a valid reference.
-    // Then store the safe reference in the structure.
-    jvpt->dist_fn = (*env)->NewGlobalRef(env, dist_fn);
+    // Store method and field IDs in the tree. These will come in handy later so that we don't have to keep looking them up.
+    jclass entry_class = (*env)->FindClass(env, "vptree/VPEntry");
+    if (!entry_class) {
+        throwIllegalState(env, "Couldn't find the VPEntry class.");
+        return;
+    }
+    jvpt->dist_fn_ID = (*env)->GetMethodID(env, dist_fn, "apply", "(Ljava/lang/Object;Ljava/lang/Object;)D");
+    if (!(jvpt->dist_fn_ID)) {
+        throwIllegalState(env, "Couldn't find the distance function's ID.");
+        return;
+    }
+    jvpt->entry_dist_ID = (*env)->GetFieldID(env, entry_class, "distance", "D");
+    if (!(jvpt->entry_dist_ID)) {
+        throwIllegalState(env, "Couldn't find the VPEntry class's \"distance\" member ID.");
+        return;
+    }
+    jvpt->entry_item_ID = (*env)->GetFieldID(env, entry_class, "item", "Ljava/lang/Object");
+    if (!(jvpt->entry_item_ID)) {
+        throwIllegalState(env, "Couldn't find the VPEntry class's \"item\" member ID.");
+        return;
+    }
 
+    // Now we know that we can maybe return results...
     // Consume the array, fixing the object locations in memory, and put them in the scratch space
     jsize num_datapoints = (*env)->GetArrayLength(env, datapoints);
     for (jsize i = 0; i < num_datapoints; i++) {
@@ -100,9 +131,11 @@ JNIEXPORT void JNICALL Java_vptree_VPTree_VPT_1build(JNIEnv* env, jobject this, 
     }
 
     // Create the tree
-    VPT_build(&(jvpt->vpt), datapoint_space, num_datapoints, JVPTree_dist_fn, dist_fn);
-
-    // Check for tree creation errors
+    bool success = VPT_build(&(jvpt->vpt), datapoint_space, num_datapoints, JVPTree_dist_fn, dist_fn);
+    if (!success) {
+        throwOOM(env, "Ran out of memory building the Vantage Point Tree.");
+        return;
+    }
 
     // Figure out where to put the pointer in the VPTree<T> object, and put it there.
     jclass this_class = (*env)->GetObjectClass(env, this);
@@ -117,15 +150,17 @@ JNIEXPORT void JNICALL Java_vptree_VPTree_VPT_1build(JNIEnv* env, jobject this, 
  */
 JNIEXPORT jobject JNICALL
 Java_vptree_VPTree_nn(JNIEnv* env, jobject this, jobject datapoint) {
-    // Get owned pointer
+    // Get owned pointer to jvptree struct
     jclass this_class = (*env)->GetObjectClass(env, this);
     jfieldID ptr_fid = (*env)->GetFieldID(env, this_class, "vpt_ptr", LONG_SIG);
-    VPTree* vpt = (VPTree*)(*env)->GetLongField(env, this, ptr_fid);
-
-    if (!vpt) {
-        throwIllegalState(env, "Cannot be used after closed.");
+    JVPTree* jvpt = (JVPTree*)(*env)->GetLongField(env, this, ptr_fid);
+    if (!jvpt) {
+        throwIllegalState(env, "Either the creation of the tree failed, or the tree has already been closed.");
         return NULL;
     }
+
+    VPTree* vpt = &(jvpt->vpt);
+    VPEntry* entry = VPT_nn(vpt, datapoint);
 }
 
 /*

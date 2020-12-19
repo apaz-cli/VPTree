@@ -14,8 +14,10 @@ public class VPTree<T> implements Closeable {
 	// the location here.
 	private long vpt_ptr = 0L;
 
-	public VPTree(Collection<T> coll, BiFunction<T, T, Double> distFn) {
-		VPT_build(coll.toArray(), distFn);
+	// This distance function may never throw an exception under any circumstances.
+	// If it does, it's possible that the entire JVM could go haywire.
+	public VPTree(Collection<T> coll, BiFunction<T, T, Double> distFn_noexcept) {
+		VPT_build(coll.toArray(), distFn_noexcept);
 	}
 
 	private native void VPT_build(Object[] objArr, BiFunction<T, T, Double> distFn);
@@ -25,7 +27,7 @@ public class VPTree<T> implements Closeable {
 	public native List<VPEntry<T>> knn(T datapoint);
 
 	public native int size();
-	
+
 	@Override
 	public native void close();
 }

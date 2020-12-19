@@ -50,9 +50,9 @@ void assert_locally_sorted(VPEntry* arr, size_t n) {
 }
 
 #else
-void print_list(VPEntry* arr, size_t n) {}
-void assert_sorted(VPEntry* arr, size_t n, vpt_t datapoint, VPTree* tree) {}
-void assert_locally_sorted(VPEntry* arr, size_t n) {}
+void print_list(VPEntry* arr, size_t n) { (void)arr; (void)n; }
+void assert_sorted(VPEntry* arr, size_t n, vpt_t datapoint, VPTree* tree) { (void)arr; (void)n; (void)datapoint; (void)tree; }
+void assert_locally_sorted(VPEntry* arr, size_t n) { (void)arr; (void)n; }
 #endif
 
 // Large

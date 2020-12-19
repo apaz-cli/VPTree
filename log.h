@@ -9,13 +9,9 @@
 #include <assert.h>
 #include <stdarg.h>
 #include <stdio.h>
-#define LOG(format, message) \
-    printf(format, message); \
-    fflush(stdout);
+#define LOG(format, message) printf(format, message); fflush(stdout);
 
-#define LOGs(message)        \
-    printf("%s\n", message); \
-    fflush(stdout);
+#define LOGs(message) printf("%s\n", message); fflush(stdout);
 
 void debug_printf(const char *fmt, ...) {
     va_list args;
@@ -28,7 +24,7 @@ void debug_printf(const char *fmt, ...) {
 #else
 #define LOG(format, message) ;
 #define LOGs(format) ;
-void debug_printf(const char *fmt, ...) {}
+void debug_printf(const char *fmt, ...) { (void)fmt; }
 #endif
 
 #endif  // Include guard
