@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+javac -h . VPTree.java VPEntry.java
+clang -Wall -Wextra -lpthread -lm -g -Ofast -shared -fPIC -I/usr/lib/jvm/java-11-openjdk-amd64/include -I/usr/lib/jvm/java-11-openjdk-amd64/include/linux vptree_VPTree.c -o libJVPTree.so
+sudo mv libJVPTree.so /usr/lib/libJVPTree.so

@@ -4,6 +4,7 @@
 #include "vptree_VPTree.h"
 
 #include <stdarg.h>
+#include <stdbool.h>
 #include <stdio.h>
 
 #define EXT_DEBUG 1
@@ -149,7 +150,7 @@ JNIEXPORT void JNICALL Java_vptree_VPTree_VPT_1build(JNIEnv* env, jobject this, 
         throwIllegalState(env, "Couldn't find the VPEntry class's \"distance\" member ID.");
         return;
     }
-    jvpt->entry_item_ID = (*env)->GetFieldID(env, entry_class, "item", "java/lang/Object");
+    jvpt->entry_item_ID = (*env)->GetFieldID(env, entry_class, "item", "java/lang/Object;");
     if (!(jvpt->entry_item_ID)) {
         throwIllegalState(env, "Couldn't find the VPEntry class's \"item\" member ID.");
         return;
