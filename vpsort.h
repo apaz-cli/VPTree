@@ -21,21 +21,7 @@ typedef struct VPEntry VPEntry;
 
 // Debugging
 #if DEBUG
-void print_list(VPEntry* arr, size_t n) {
-    double* p;
-    double d;
-    printf("[");
-    for (size_t i = 0; i < n - 1; i++) {
-        p = arr[i].item;
-        d = arr[i].distance;
-        printf("[%p,%.2f],", p, d);
-    }
-    p = arr[n - 1].item;
-    d = arr[n - 1].distance;
-    printf("[%p,%.2f]]\n", p, d);
-}
-
-void assert_sorted(VPEntry* arr, size_t n, vpt_t datapoint, VPTree* tree) {
+void assert_absolutely_sorted(VPEntry* arr, size_t n, vpt_t datapoint, VPTree* tree) {
     for (size_t i = 1; i < n; i++) {
         assert(tree->dist_fn(tree->extra_data, arr[i - 1].item, datapoint) == arr[i - 1].distance);
         assert(tree->dist_fn(tree->extra_data, arr[i].item, datapoint) == arr[i].distance);
@@ -43,26 +29,35 @@ void assert_sorted(VPEntry* arr, size_t n, vpt_t datapoint, VPTree* tree) {
     }
 }
 
-void assert_locally_sorted(VPEntry* arr, size_t n) {
+void assert_sorted(VPEntry* arr, size_t n) {
     for (size_t i = 1; i < n; i++) {
         assert(arr[i - 1].distance <= arr[i].distance);
     }
 }
 
 #else
-void print_list(VPEntry* arr, size_t n) { (void)arr; (void)n; }
-void assert_sorted(VPEntry* arr, size_t n, vpt_t datapoint, VPTree* tree) { (void)arr; (void)n; (void)datapoint; (void)tree; }
-void assert_locally_sorted(VPEntry* arr, size_t n) { (void)arr; (void)n; }
+void assert_absolutely_sorted(VPEntry* arr, size_t n, vpt_t datapoint, VPTree* tree) {
+    (void)arr;
+    (void)n;
+    (void)datapoint;
+    (void)tree;
+}
+void assert_sorted(VPEntry* arr, size_t n) {
+    (void)arr;
+    (void)n;
+}
 #endif
 
 // Large
 #define MERGESORT 0
 #define LARGESORTALG MERGESORT
 void mergesort(VPEntry* arr, size_t n);
+void quicksort(VPEntry* arr, size_t n);
 void largesort(VPEntry* arr, size_t n) {
 #if LARGESORTALG == MERGESORT
     mergesort(arr, n);
 #endif
+    assert_sorted(arr, n);
 }
 
 // Small
@@ -155,6 +150,7 @@ void mergesort(VPEntry* arr, size_t n) {
     }
 
     big.distance = INFINITY;
+    (void)(big.item);
 
     // Merge the arrays
     // Here too, I hope that the compiler is going ham.
@@ -207,10 +203,9 @@ void insersort(VPEntry* arr, size_t n) {
     }
 }
 void bubblsort(VPEntry* arr, size_t n) {
-    bool swapped = false;
     VPEntry t;
     size_t c = 0, d;
-    for (;;) {
+    for (bool swapped;;) {
         swapped = false;
         for (d = 0; d < n - c - 1; d++) {
             if (arr[d].distance > arr[d + 1].distance) {

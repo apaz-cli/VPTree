@@ -7,7 +7,7 @@ import java.io.Closeable;
 
 public class VPTree<T> implements Closeable {
 	static {
-		System.loadLibrary("VPTree");
+		System.loadLibrary("JVPTree");
 	}
 
 	// Native method VPT_build allocates memory for persistent storage and stores
@@ -24,7 +24,7 @@ public class VPTree<T> implements Closeable {
 
 	public native VPEntry<T> nn(T datapoint);
 
-	public native List<VPEntry<T>> knn(T datapoint);
+	public native List<VPEntry<T>> knn(T datapoint, long k);
 
 	public native int size();
 

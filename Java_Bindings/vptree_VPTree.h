@@ -26,10 +26,10 @@ JNIEXPORT jobject JNICALL Java_vptree_VPTree_nn
 /*
  * Class:     vptree_VPTree
  * Method:    knn
- * Signature: (Ljava/lang/Object;)Ljava/util/List;
+ * Signature: (Ljava/lang/Object;J)Ljava/util/List;
  */
 JNIEXPORT jobject JNICALL Java_vptree_VPTree_knn
-  (JNIEnv *, jobject, jobject);
+  (JNIEnv *, jobject, jobject, jlong);
 
 /*
  * Class:     vptree_VPTree
