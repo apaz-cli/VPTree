@@ -186,11 +186,15 @@ bool VPT_build(VPTree* vpt, vpt_t* data, size_t num_items,
     }
     LOGs("Entry list copied.");
 
+    // Allocate some space to help with sorting.
+    VPEntry* scratch_space = malloc(num_entries * sizeof(VPEntry));
+    if (!scratch_space) return NULL;
+
     // Split the list in half using the root as a vantage point.
     // Sort the list by distance to the root
     for (i = 0; i < num_entries; i++)
         entry_list[i].distance = dist_fn(extra_data, entry_list[i].item, sort_by);
-    VPSort(entry_list, num_entries);
+    VPSort(entry_list, num_entries, scratch_space);
     LOGs("Entry list sorted.");
 
     // Find median item and record position, splitting the list in (roughly) half.
@@ -268,7 +272,7 @@ bool VPT_build(VPTree* vpt, vpt_t* data, size_t num_items,
                 for (i = 0; i < num_entries; i++)
                     entry_list[i].distance =
                         dist_fn(extra_data, sort_by, entry_list[i].item);
-                VPSort(entry_list, num_entries);
+                VPSort(entry_list, num_entries, scratch_space);
 
                 // Split the list of entries by the median.
                 right_num_children = num_entries / 2;
@@ -339,7 +343,7 @@ bool VPT_build(VPTree* vpt, vpt_t* data, size_t num_items,
                 for (i = 0; i < num_entries; i++)
                     entry_list[i].distance =
                         dist_fn(extra_data, sort_by, entry_list[i].item);
-                VPSort(entry_list, num_entries);
+                VPSort(entry_list, num_entries, scratch_space);
 
                 // Split the list of entries by the median.
                 right_num_children = num_entries / 2;
@@ -374,6 +378,8 @@ bool VPT_build(VPTree* vpt, vpt_t* data, size_t num_items,
             }
         }
     }
+
+    free(scratch_space);
     free(build_buffer);
     return true;
 }

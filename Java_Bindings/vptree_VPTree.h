@@ -17,22 +17,6 @@ JNIEXPORT void JNICALL Java_vptree_VPTree_VPT_1build
 
 /*
  * Class:     vptree_VPTree
- * Method:    nn
- * Signature: (Ljava/lang/Object;)Lvptree/VPEntry;
- */
-JNIEXPORT jobject JNICALL Java_vptree_VPTree_nn
-  (JNIEnv *, jobject, jobject);
-
-/*
- * Class:     vptree_VPTree
- * Method:    knn
- * Signature: (Ljava/lang/Object;J)Ljava/util/List;
- */
-JNIEXPORT jobject JNICALL Java_vptree_VPTree_knn
-  (JNIEnv *, jobject, jobject, jlong);
-
-/*
- * Class:     vptree_VPTree
  * Method:    size
  * Signature: ()I
  */
@@ -46,6 +30,22 @@ JNIEXPORT jint JNICALL Java_vptree_VPTree_size
  */
 JNIEXPORT void JNICALL Java_vptree_VPTree_close
   (JNIEnv *, jobject);
+
+/*
+ * Class:     vptree_VPTree
+ * Method:    nn
+ * Signature: (Ljava/lang/Object;)Lvptree/VPEntry;
+ */
+JNIEXPORT jobject JNICALL Java_vptree_VPTree_nn
+  (JNIEnv *, jobject, jobject);
+
+/*
+ * Class:     vptree_VPTree
+ * Method:    knn
+ * Signature: (Ljava/lang/Object;J)Ljava/util/List;
+ */
+JNIEXPORT jobject JNICALL Java_vptree_VPTree_knn
+  (JNIEnv *, jobject, jobject, jlong);
 
 #ifdef __cplusplus
 }

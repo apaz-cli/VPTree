@@ -8,12 +8,15 @@
 #include <time.h>
 
 #define DEBUG 0
+#define DEBUG_LOG 0
 #include "log.h"
 
-#define MEMDEBUG 0
-#define PRINT_MEMALLOCS 0
+#define MEMDEBUG 1
+#define PRINT_MEMALLOCS 1
 #include "memdebug.h/memdebug.h"
 
+
+#define NUM_ENTRIES 12000
 #define VECDIM 4
 #include "vec.h"
 
@@ -25,23 +28,6 @@
 double rand_zero_fifty() {
     return RMIN + (rand() / (RAND_MAX / (RMAX - RMIN)));
 }
-
-#if DEBUG
-static inline void
-assert_in_range(VEC* entries, size_t num) {
-    for (size_t i = 0; i < num; i++) {
-        for (size_t j = 0; j < VECDIM; j++) {
-            assert(entries[i].data[j] >= RMIN);
-            assert(entries[i].data[j] <= RMAX);
-        }
-    }
-}
-#else
-static inline void assert_in_range(VEC* entries, size_t num) {
-    (void)entries;
-    (void)num;
-}
-#endif
 
 static inline void
 print_inorder(VPNode* node, size_t depth) {
@@ -93,7 +79,7 @@ knn_test(VPTree* vpt, vpt_t* query_point, size_t k) {
 
     // print results
     printf("Finished KNN.\n");
-    printf("Closest %lu to: ", num_knns);
+    printf("Closest %zu to: ", num_knns);
     print_VEC(query_point);
 
     for (size_t i = 0; i < num_knns; i++) {
@@ -132,7 +118,7 @@ nn_test(VPTree* vpt, vpt_t* query_point) {
 int main() {
     // Generate some random data
     srand(time(0));
-    size_t num_entries = 12000000;
+    size_t num_entries = NUM_ENTRIES;
     vpt_t* entries = gen_entries(num_entries);
     if (!entries) {
         printf("Failed to allocate enough memory for the points to put in the tree.\n");

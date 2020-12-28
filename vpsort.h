@@ -19,7 +19,7 @@ struct VPEntry {
 typedef struct VPEntry VPEntry;
 #endif /*__VPTree*/
 
-// Debugging
+// Debug assertions
 #if DEBUG
 void assert_absolutely_sorted(VPEntry* arr, size_t n, vpt_t datapoint, VPTree* tree) {
     for (size_t i = 1; i < n; i++) {
@@ -34,7 +34,6 @@ void assert_sorted(VPEntry* arr, size_t n) {
         assert(arr[i - 1].distance <= arr[i].distance);
     }
 }
-
 #else
 void assert_absolutely_sorted(VPEntry* arr, size_t n, vpt_t datapoint, VPTree* tree) {
     (void)arr;
@@ -48,66 +47,45 @@ void assert_sorted(VPEntry* arr, size_t n) {
 }
 #endif
 
-// Large
-#define MERGESORT 0
-#define LARGESORTALG MERGESORT
-void mergesort(VPEntry* arr, size_t n);
-void quicksort(VPEntry* arr, size_t n);
-void largesort(VPEntry* arr, size_t n) {
-#if LARGESORTALG == MERGESORT
-    mergesort(arr, n);
-#endif
-    assert_sorted(arr, n);
-}
-
-// Small
-#define SHELLSORT 0
-#define INSERTIONSORT 1
-#define BUBBLESORT 2
-#define SMALLSORTALG SHELLSORT
-void shellsort(VPEntry* arr, size_t n);
-void insersort(VPEntry* arr, size_t n);
-void bubblsort(VPEntry* arr, size_t n);
-void smallsort(VPEntry* arr, size_t n) {
-#if SMALLSORTALG == SHELLSORT
-    shellsort(arr, n);
-#elif SMALLSORTALG == INSERTIONSORT
-    insersort(arr, n);
-#elif SMALLSORTALG == BUBBLESORT
-    bubblesort(arr, n);
-#endif
-}
-
-#define SORT_THRESHOLD 2000
-void VPSort(VPEntry* arr, size_t n) {
-    if (n < SORT_THRESHOLD) {
-        smallsort(arr, n);
-    } else {
-        largesort(arr, n);
+/**************/
+/* SHELL SORT */
+/**************/
+void shellsort(VPEntry* arr, size_t n) {
+    size_t interval, i, j;
+    VPEntry temp;
+    for (interval = n / 2; interval > 0; interval /= 2) {
+        for (i = interval; i < n; i += 1) {
+            temp = arr[i];
+            for (j = i; j >= interval && arr[j - interval].distance > temp.distance; j -= interval) {
+                arr[j] = arr[j - interval];
+            }
+            arr[j] = temp;
+        }
     }
 }
 
-/***************/
-/* LARGE SORTS */
-/***************/
+/**************/
+/* SHELL SORT */
+/**************/
 #define MERGESORT_NUM_THREADS 8
 struct Sublist {
     VPEntry* arr;
     size_t n;
 };
 typedef struct Sublist Sublist;
-void* __mergesort_subsort(void* sublist) {
+
+static void*
+__mergesort_subsort(void* sublist) {
     VPEntry* arr = ((Sublist*)sublist)->arr;
     size_t n = ((Sublist*)sublist)->n;
     shellsort(arr, n);
     return NULL;
 }
-void mergesort(VPEntry* arr, size_t n) {
+void mergesort(VPEntry* arr, size_t n, VPEntry* scratch_space) {
     const size_t num_threads = MERGESORT_NUM_THREADS;
     pthread_t threadpool[num_threads - 1];
     size_t each = n / num_threads;
 
-    VPEntry* scratch_space;
     size_t mergepos[num_threads];
     Sublist sublists[num_threads];
     size_t start = 0;
@@ -129,19 +107,15 @@ void mergesort(VPEntry* arr, size_t n) {
             exit(1);
         }
 
-        debug_printf("  Started thread %lu from: %lu with %lu items.\n", i, start, each);
-
         start = start + each;
     }
     sublists[num_threads - 1].arr = arr + start;
     sublists[num_threads - 1].n = n - start;
 
     // Sort the last list on the current thread
-    debug_printf("  Started thread %lu from: %lu with %lu items.\n", num_threads - 1, start, n - start);
     __mergesort_subsort(sublists + (num_threads - 1));
 
-    // Allocate some memory for merging the lists, then wait for the other threads.
-    scratch_space = (VPEntry*)malloc(n * sizeof(VPEntry));
+    // Wait for the other threads.
     for (i = 0; i < num_threads - 1; i++) {
         if (pthread_join(threadpool[i], NULL)) {
             fprintf(stdout, "Error joining pthread.");
@@ -167,56 +141,17 @@ void mergesort(VPEntry* arr, size_t n) {
     }
     // Copy the list back into the array. Debug = 1 in "vpt.h" to assert that the array is getting sorted.
     memcpy(arr, scratch_space, n * sizeof(VPEntry));
-    free(scratch_space);
 }
 
 /***************/
-/* SMALL SORTS */
+/* MASTER SORT */
 /***************/
-void shellsort(VPEntry* arr, size_t n) {
-    size_t interval, i, j;
-    VPEntry temp;
-    for (interval = n / 2; interval > 0; interval /= 2) {
-        for (i = interval; i < n; i += 1) {
-            temp = arr[i];
-            for (j = i; j >= interval && arr[j - interval].distance > temp.distance; j -= interval) {
-                arr[j] = arr[j - interval];
-            }
-            arr[j] = temp;
-        }
+#define SORT_THRESHOLD 2000
+void VPSort(VPEntry* arr, size_t n, VPEntry* scratch_space) {
+    if (n < SORT_THRESHOLD) {
+        shellsort(arr, n);
+    } else {
+        mergesort(arr, n, scratch_space);
     }
-}
-void insersort(VPEntry* arr, size_t n) {
-    size_t i, j;
-    VPEntry key;
-    for (j = 0; j < n - 1; j++) {
-        i = j + 1;
-        key = arr[i];
-
-        /* Move elements of arr[0..i-1], that are  
-        greater than key, to one position ahead  
-        of their current position */
-        for (; arr[j].distance > key.distance; j--) {
-            arr[j + 1] = arr[j];
-        }
-        arr[j + 1] = key;
-    }
-}
-void bubblsort(VPEntry* arr, size_t n) {
-    VPEntry t;
-    size_t c = 0, d;
-    for (bool swapped;;) {
-        swapped = false;
-        for (d = 0; d < n - c - 1; d++) {
-            if (arr[d].distance > arr[d + 1].distance) {
-                /* Swapping */
-                t = arr[d];
-                arr[d] = arr[d + 1];
-                arr[d + 1] = t;
-                swapped = true;
-            }
-        }
-        if (!swapped) return;
-        c++;
-    }
+    assert_sorted(arr, n);
 }
