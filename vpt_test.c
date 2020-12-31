@@ -15,7 +15,6 @@
 #define PRINT_MEMALLOCS 1
 #include "memdebug.h/memdebug.h"
 
-
 #define NUM_ENTRIES 12000
 #define VECDIM 4
 #include "vec.h"
@@ -70,12 +69,12 @@ gen_entries(size_t num_entries) {
 static inline bool
 knn_test(VPTree* vpt, vpt_t* query_point, size_t k) {
     // knn
-    VPEntry* knns = VPT_knn(vpt, *query_point, k);
-    if (!knns) {
-        free(query_point);
+    size_t num_knns;
+    VPEntry knns[k];
+    VPT_knn(vpt, *query_point, k, knns, &num_knns);
+    if (!num_knns) {
         return false;
     }
-    size_t num_knns = min(k, vpt->size);
 
     // print results
     printf("Finished KNN.\n");
@@ -87,7 +86,6 @@ knn_test(VPTree* vpt, vpt_t* query_point, size_t k) {
         print_VEC(&(knns[i].item));
     }
 
-    free(knns);
     free(query_point);
     return true;
 }
@@ -95,8 +93,10 @@ knn_test(VPTree* vpt, vpt_t* query_point, size_t k) {
 static inline bool
 nn_test(VPTree* vpt, vpt_t* query_point) {
     // nn
-    VPEntry* nn = VPT_nn(vpt, *query_point);
-    if (!nn) {
+    bool result_found;
+    VPEntry nn;
+    VPT_nn(vpt, *query_point, &nn, &result_found);
+    if (!result_found) {
         printf("Failed to find a nearest neighbor.\n");
         free(query_point);
         return false;
@@ -107,10 +107,9 @@ nn_test(VPTree* vpt, vpt_t* query_point) {
     printf("Closest VEC to: ");
     print_VEC(query_point);
 
-    printf("dist: %f, ", nn->distance);
-    print_VEC(&(nn->item));
+    printf("dist: %f, ", nn.distance);
+    print_VEC(&(nn.item));
 
-    free(nn);
     free(query_point);
     return true;
 }
@@ -134,6 +133,8 @@ int main() {
         return 1;
     }
     printf("Built the tree.\n");
+
+    print_heap();
 
     // knn
     success = knn_test(&vpt, gen_entries(1), 20);

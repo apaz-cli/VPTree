@@ -16,6 +16,7 @@
 #define VPT_BUILD_SMALL_THRESHOLD 250
 #define VPT_BUILD_LIST_THRESHOLD 100
 #define VPT_MAX_HEIGHT 100
+#define VPT_MAX_LIST_SIZE 1000
 
 #define NODEALLOC_BUF_SIZE 1000
 // #define LISTALLOC_BUF_SIZE 100000
@@ -473,13 +474,25 @@ knnlist_push(VPEntry* knnlist, size_t knnlist_size, VPEntry to_add) {
     assert_sorted(knnlist, knnlist_size);
 }
 
-/* Returns a buffer (that must be freed) of MIN(k, vpt->size) items. Returns NULL if failed. */
-VPEntry* VPT_knn(VPTree* vpt, vpt_t datapoint, size_t k) {
-    if (vpt->size == 0 || k == 0) return NULL;
+/**
+ * Performs a k-nearest-neighbor search on the Vantage Point Tree, finding the k closest
+ * datapoints in the tree to the datapoint provided, according to the distance function
+ * for the VPTree.
+ * 
+ * The results are written to result_space, which should be a buffer of size equal to or greater
+ * than "VPEntry result_space[k];", which is to say (k * sizeof(VPEntry*)) bytes large.
+ * 
+ * Also writes the number of results found to num_results.
+ */
+void VPT_knn(VPTree* vpt, vpt_t datapoint, size_t k, VPEntry* result_space, size_t* num_results) {
+    if (!vpt->size || !k) {
+        *num_results = 0;
+        return;
+    }
 
+    // Create a temp buffer
     size_t knnlist_size = 0;
-    VPEntry* knnlist = malloc(sizeof(VPEntry) * (k + VPT_BUILD_LIST_THRESHOLD + 1));
-    if (!knnlist) return NULL;
+    VPEntry knnlist[k + VPT_MAX_LIST_SIZE];
 
     // The largest distance to a knn
     double tau = INFINITY;
@@ -499,7 +512,7 @@ VPEntry* VPT_knn(VPTree* vpt, vpt_t datapoint, size_t k) {
         // Node is a branch
         if (current_node->ulabel == 'b') {
             // Calculate the distance between this branch node and the target point.
-            double dist = vpt->dist_fn(vpt->extra_data, datapoint, current_node->u.branch.item);
+            double dist = vpt->dist_fn(vpt->extra_data, current_node->u.branch.item, datapoint);
             VPEntry current;
             current.item = current_node->u.branch.item;
             current.distance = dist;
@@ -539,7 +552,7 @@ VPEntry* VPT_knn(VPTree* vpt, vpt_t datapoint, size_t k) {
             size_t vplist_size = current_node->u.pointlist.size;
 
             for (size_t i = 0; i < vplist_size; i++) {
-                vplist_distances[i] = vpt->dist_fn(vpt->extra_data, datapoint, vplist[i]);
+                vplist_distances[i] = vpt->dist_fn(vpt->extra_data, vplist[i], datapoint);
             }
 
             // Update the new k nearest neighbors
@@ -567,12 +580,30 @@ VPEntry* VPT_knn(VPTree* vpt, vpt_t datapoint, size_t k) {
         }
     }
 
-    return realloc(knnlist, sizeof(VPEntry) * min(k, knnlist_size));
+    // Copy the results into the result space and return
+    *num_results = knnlist_size;
+    for (size_t i = 0; i < knnlist_size; i++) {
+        result_space[i] = knnlist[i];
+    }
 }
 
-VPEntry* VPT_nn(VPTree* vpt, vpt_t datapoint) {
+/**
+ * Performs a nearest-neighbor search on the Vantage Point Tree, finding the closest
+ * datapoint in the tree to the one provided, according to the distance function for 
+ * the VPTree.
+ * 
+ * The result is written to result_space, which should have enough space for a VPEntry.
+ * 
+ * If no result is found (the tree is empty), writes false to result_found. Otherwise, true.
+ */
+void VPT_nn(VPTree* vpt, vpt_t datapoint, VPEntry* result_space, bool* result_found) {
+    if (!vpt->size) {
+        *result_found = false;
+        return;
+    }
+
     double dist;
-    vpt_t* closest = NULL;
+    vpt_t closest;
     double closest_dist = INFINITY;
 
     size_t to_traverse_size = 1;
@@ -588,13 +619,12 @@ VPEntry* VPT_nn(VPTree* vpt, vpt_t datapoint) {
         // If branch
         if (current_node->ulabel == 'b') {
             // Calculate and consider this item's distance
-            dist = vpt->dist_fn(vpt->extra_data, datapoint, current_node->u.branch.item);
+            dist = vpt->dist_fn(vpt->extra_data, current_node->u.branch.item, datapoint);
 
             // Update new closest
             if (dist < closest_dist) {
-                debug_printf("Found new nearest neighbor: %f at %p.\n", closest_dist, closest);
                 closest_dist = dist;
-                closest = &(current_node->u.branch.item);
+                closest = current_node->u.branch.item;
             }
 
             // Recurse down the tree
@@ -621,24 +651,18 @@ VPEntry* VPT_nn(VPTree* vpt, vpt_t datapoint) {
 
             // Search for smaller items in the list
             for (size_t i = 0; i < listsize; i++) {
-                dist = vpt->dist_fn(vpt->extra_data, datapoint, pointlist[i]);
+                dist = vpt->dist_fn(vpt->extra_data, pointlist[i], datapoint);
 
                 if (dist < closest_dist) {
-                    debug_printf("Found new nearest neighbor: %f at %p.\n", closest_dist, closest);
                     closest_dist = dist;
-                    closest = pointlist + i;
+                    closest = pointlist[i];
                 }
             }
         }
     }
 
-    VPEntry* ret = malloc(sizeof(VPEntry));
-    if (!ret) {
-        LOGs("Failed to allocate memory for the result. Returning NULL instead.");
-        return NULL;
-    }
-    ret->distance = closest_dist;
-    ret->item = *(closest);
-    return ret;
+    result_space->distance = closest_dist;
+    result_space->item = closest;
+    *result_found = true;
 }
 #endif

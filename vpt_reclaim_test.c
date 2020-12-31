@@ -1,4 +1,6 @@
+#include <assert.h>
 
+#define PRINT_MEMALLOCS 0
 #include "memdebug.h/memdebug.h"
 
 #define vpt_t void*
@@ -30,5 +32,6 @@ int main() {
         free(torn[i]);
     }
     free(torn);
-    print_heap();
+
+    assert(!get_num_allocs());
 }
