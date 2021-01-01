@@ -413,10 +413,8 @@ Java_vptree_VPTree_nn(JNIEnv* env, jobject this, jobject datapoint) {
     }
     jvpt->currently_comparing = datapoint;
 
-    bool result_found;
     VPEntry nn;
-    VPT_nn(&(jvpt->vpt), -1, &nn, &result_found);
-    if (!result_found) return NULL;
+    VPT_nn(&(jvpt->vpt), -1, &nn);
 
     return to_VPEntry_obj(env, jvpt, nn);
 }

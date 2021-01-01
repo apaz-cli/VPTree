@@ -1,6 +1,7 @@
 #define MAIN
 #ifdef MAIN
 
+#include <assert.h>
 #include <math.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -9,24 +10,26 @@
 
 #define DEBUG 0
 #define DEBUG_LOG 0
-#include "log.h"
+#include "../log.h"
 
 #define MEMDEBUG 1
-#define PRINT_MEMALLOCS 1
-#include "memdebug.h/memdebug.h"
+#define PRINT_MEMALLOCS 0
+#include "../memdebug.h/memdebug.h"
 
-#define NUM_ENTRIES 12000
-#define VECDIM 4
-#include "vec.h"
+#define NUM_ENTRIES 1200000
+#define VECDIM 32
+#include "../vec.h"
 
 #define vpt_t VEC
-#include "vpt.h"
+#include "../vpt.h"
 
 #define RMAX 50.0
 #define RMIN 0.0
 double rand_zero_fifty() {
     return RMIN + (rand() / (RAND_MAX / (RMAX - RMIN)));
 }
+
+#define PRINT_STEPS 0
 
 static inline void
 print_inorder(VPNode* node, size_t depth) {
@@ -77,13 +80,17 @@ knn_test(VPTree* vpt, vpt_t* query_point, size_t k) {
     }
 
     // print results
-    printf("Finished KNN.\n");
-    printf("Closest %zu to: ", num_knns);
-    print_VEC(query_point);
+    if (PRINT_STEPS) {
+        printf("Finished KNN.\n");
+        printf("Closest %zu to: ", num_knns);
+        print_VEC(query_point);
+    }
 
     for (size_t i = 0; i < num_knns; i++) {
-        printf("dist: %f, ", knns[i].distance);
-        print_VEC(&(knns[i].item));
+        if (PRINT_STEPS) {
+            printf("dist: %f, ", knns[i].distance);
+            print_VEC(&(knns[i].item));
+        }
     }
 
     free(query_point);
@@ -93,22 +100,17 @@ knn_test(VPTree* vpt, vpt_t* query_point, size_t k) {
 static inline bool
 nn_test(VPTree* vpt, vpt_t* query_point) {
     // nn
-    bool result_found;
     VPEntry nn;
-    VPT_nn(vpt, *query_point, &nn, &result_found);
-    if (!result_found) {
-        printf("Failed to find a nearest neighbor.\n");
-        free(query_point);
-        return false;
-    }
+    VPT_nn(vpt, *query_point, &nn);
 
     // print results
-    printf("Finished NN.\n");
-    printf("Closest VEC to: ");
-    print_VEC(query_point);
-
-    printf("dist: %f, ", nn.distance);
-    print_VEC(&(nn.item));
+    if (PRINT_STEPS) {
+        printf("Finished NN.\n");
+        printf("Closest VEC to: ");
+        print_VEC(query_point);
+        printf("dist: %f, ", nn.distance);
+        print_VEC(&(nn.item));
+    }
 
     free(query_point);
     return true;
@@ -123,7 +125,7 @@ int main() {
         printf("Failed to allocate enough memory for the points to put in the tree.\n");
         return 1;
     }
-    printf("Generated random data.\n");
+    if (PRINT_STEPS) printf("Generated random data.\n");
 
     // Build
     VPTree vpt;
@@ -132,9 +134,6 @@ int main() {
         printf("Ran out of memory building the tree.\n");
         return 1;
     }
-    printf("Built the tree.\n");
-
-    print_heap();
 
     // knn
     success = knn_test(&vpt, gen_entries(1), 20);
@@ -167,6 +166,8 @@ int main() {
     // Free the remaining memory
     VPT_destroy(&vpt);
     free(entries);
-    print_heap();
+
+    // Assert no memory leaks
+    assert(!get_num_allocs());
 }
 #endif

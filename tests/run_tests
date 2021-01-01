@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+
+clang -lm -lpthread -Ofast -march=native -g -fsanitize=address vpt_test.c
+./a.out
+echo 'vpt_test completed.'
+
+clang -lm -lpthread -Ofast -march=native -g -fsanitize=address vpt_reclaim_test.c
+./a.out
+echo 'vpt_reclaim_test completed.'
+
+clang -lm -lpthread -Ofast -march=native -g -fsanitize=address vpt_sizes_test.c
+./a.out
+echo 'vpt_sizes_test completed.'
+
+rm a.out
