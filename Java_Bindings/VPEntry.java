@@ -8,4 +8,15 @@ public class VPEntry<T> {
 		this.item = item;
 		this.distance = distance;
 	};
+
+	@Override
+	public String toString() {
+		return new StringBuilder()
+				.append('<')
+				.append(this.item.toString())
+				.append(',')
+				.append(this.distance)
+				.append('>')
+				.toString();
+	}
 }

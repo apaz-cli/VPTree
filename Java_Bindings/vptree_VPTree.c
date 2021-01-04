@@ -7,10 +7,8 @@
 #include <stdbool.h>
 #include <stdio.h>
 
-#define EXT_DEBUG 1
+#define EXT_DEBUG 0
 #if EXT_DEBUG
-
-#define VPENTRY_CLASSPATH "vptree/VPEntry"
 
 static inline void
 ext_printf(const char* fmt, ...) {
@@ -24,7 +22,7 @@ ext_printf(const char* fmt, ...) {
 #else
 
 static inline void
-ext_printf(const char* fmt, ...) {}
+ext_printf(const char* fmt, ...) {(void) fmt; }
 
 #endif
 
@@ -32,8 +30,12 @@ ext_printf(const char* fmt, ...) {}
 extern "C" {
 #endif
 
+#define ANSI_TERMINAL 0
+#define PRINT_MEMALLOCS 0
 #define MEMDEBUG 1
-#define DEBUG 1
+#include "../memdebug.h/memdebug.h"
+
+#define DEBUG 0
 /**********/
 /* VPTree */
 /**********/
@@ -47,22 +49,19 @@ struct JVPTree {
     // The actual data structure. Destroyed with VPT_destroy() or VPT_reclaim().
     VPTree vpt;
 
-    // Global references. Will be freed with vpt_destroy.
+    // Global references. Will be freed on close.
     jobject this;
     jobject dist_fn;
     jobjectArray datapoints;
     jobject currently_comparing;
+    jclass entry_class;
+    jclass arrays_class;
 
-    // The following are cached methods and fields.
+    // The following are cached methods IDs.
+    // They need not be freed.
     jmethodID dist_fn_ID;
     jmethodID unwrap_double_ID;
-
-    jclass entry_class;
     jmethodID entry_constructor;
-    jfieldID entry_dist_ID;
-    jfieldID entry_item_ID;
-
-    jclass arrays_class;
     jmethodID to_list_ID;
 };
 typedef struct JVPTree JVPTree;
@@ -77,10 +76,11 @@ double jdist_fn(void* extra_data, jint first_idx, jint second_idx) {
     // Grab the actual objects
     jobject first = (*env)->GetObjectArrayElement(env, datapoints, first_idx);
     jobject second;
-    if (second_idx == -1)
+    if (second_idx == -1) {
         second = ((JVPTree*)extra_data)->currently_comparing;
-    else
+    } else {
         second = (*env)->GetObjectArrayElement(env, datapoints, second_idx);
+    }
 
 #if EXT_DEBUG
     if (!(first && second)) {
@@ -116,6 +116,11 @@ double jdist_fn(void* extra_data, jint first_idx, jint second_idx) {
         exit(2);
     }
 #endif
+
+    // Release the references
+    (*env)->DeleteLocalRef(env, obj_result);
+    (*env)->DeleteLocalRef(env, first);
+    if (second_idx != -1) (*env)->DeleteLocalRef(env, second);
 
     return (double)double_result;
 }
@@ -196,6 +201,7 @@ obj_print(JNIEnv* env, jobject obj) {
 
 static inline void
 set_owned_jvpt(JNIEnv* env, jobject this, JVPTree* jvpt) {
+    ext_printf("Setting the owned JVPTree.\n");
     jclass this_class = (*env)->GetObjectClass(env, this);
     jfieldID ptr_fid = (*env)->GetFieldID(env, this_class, "vpt_ptr", "J");
 #if EXT_DEBUG
@@ -205,19 +211,22 @@ set_owned_jvpt(JNIEnv* env, jobject this, JVPTree* jvpt) {
     }
 #endif
     (*env)->SetLongField(env, this, ptr_fid, (jlong)jvpt);
+    ext_printf("Set the owned JVPTree.\n");
 }
 
 static inline JVPTree*
 get_owned_jvpt(JNIEnv* env, jobject this) {
+    ext_printf("Getting the owned JVPTree.\n");
     // Get owned pointer to jvptree struct
     jclass this_class = (*env)->GetObjectClass(env, this);
     jfieldID ptr_fid = (*env)->GetFieldID(env, this_class, "vpt_ptr", "J");
     jlong longptr = (*env)->GetLongField(env, this, ptr_fid);
     JVPTree* jvpt = (JVPTree*)longptr;
     if (!jvpt) {
-        throwIllegalState(env, "Either the creation of the tree failed, or the tree has already been closed.");
+        throwIllegalState(env, "This VPTree has already been closed.");
         return NULL;
     }
+    ext_printf("Got the owned JVPTree.\n");
     return jvpt;
 }
 
@@ -232,6 +241,8 @@ get_owned_jvpt(JNIEnv* env, jobject this) {
  */
 JNIEXPORT void JNICALL
 Java_vptree_VPTree_VPT_1build(JNIEnv* env, jobject this, jobjectArray datapoints, jobject dist_fn) {
+    ext_printf("Starting JNI method: VPT_build.\n");
+
     // Validate args
     jint err;
     err = assertNotNull(env, datapoints, "Datapoints cannot be null.");
@@ -250,9 +261,11 @@ Java_vptree_VPTree_VPT_1build(JNIEnv* env, jobject this, jobjectArray datapoints
     for (jsize i = 0; i < obj_array_size; i++) {
         // ext_printf("Pulling object %d out of the array.\n", i);
         jobject obj = (*env)->GetObjectArrayElement(env, datapoints, i);
+#if EXT_DEBUG
         if ((*env)->ExceptionCheck(env)) {
             return;
         }
+#endif
         if (!obj) {
             throwIllegalArgument(env, "The Collection cannot contain any null elements.");
             return;
@@ -261,36 +274,8 @@ Java_vptree_VPTree_VPT_1build(JNIEnv* env, jobject this, jobjectArray datapoints
     }
     ext_printf("Validated that none of the elements of the Collection are null.\n");
 
-    // Fix the distance function in memory so that it does not become invalidated between calls.
-    // Later, the same will be done with the datapoints.
-    dist_fn = (*env)->NewGlobalRef(env, dist_fn);
-    if (!dist_fn) {
-        throwOOM(env, "Ran out of memory creating a global reference to the distance function.");
-        return;
-    }
-    ext_printf("Created a global ref to the distance function.\n");
-
-    // Do the same with this, and with the array of objects.
-    this = (*env)->NewGlobalRef(env, this);
-    if (!this) {
-        throwOOM(env, "Ran out of memory creating a global reference to the this VPTree.");
-        return;
-    }
-    ext_printf("Created a global ref to this.\n");
-
-    datapoints = (*env)->NewGlobalRef(env, datapoints);
-    if (!datapoints) {
-        throwOOM(env, "Ran out of memory creating a global reference to the datapoints array.");
-        return;
-    }
-    ext_printf("Created a global ref to the array of objects.\n");
-
     // Allocate space for a tree. The java object takes ownership of this pointer.
     JVPTree* jvpt = (JVPTree*)malloc(sizeof(JVPTree));
-    jvpt->env = env;
-    jvpt->this = this;
-    jvpt->dist_fn = dist_fn;
-    jvpt->datapoints = datapoints;
     ext_printf("Malloced the tree.\n");
 
     vpt_t* datapoint_space = (vpt_t*)malloc(obj_array_size * sizeof(vpt_t));
@@ -304,86 +289,147 @@ Java_vptree_VPTree_VPT_1build(JNIEnv* env, jobject this, jobjectArray datapoints
     }
     ext_printf("Malloced and filled the datapoint space.\n");
 
-    // Cache VPEntry class information in the tree.
-    jvpt->entry_class = (*env)->FindClass(env, VPENTRY_CLASSPATH);
-    if (!jvpt->entry_class) {
+    // Cache information for other methods in the tree.
+    jclass entry_class = (*env)->FindClass(env, "vptree/VPEntry");
+#if EXT_DEBUG
+    if (!entry_class) {
         throwIllegalState(env, "Couldn't find the VPEntry class.");
         return;
     }
-    jvpt->entry_constructor = (*env)->GetMethodID(env, jvpt->entry_class, "<init>", "(Ljava/lang/Object;D)V");
+#endif
+    jvpt->entry_constructor = (*env)->GetMethodID(env, entry_class, "<init>", "(Ljava/lang/Object;D)V");
+#if EXT_DEBUG
     if (!(jvpt->entry_constructor)) {
         throwIllegalState(env, "Couldn't find the VPEntry class's constructor method ID.");
         return;
     }
-    jvpt->entry_item_ID = (*env)->GetFieldID(env, jvpt->entry_class, "item", "Ljava/lang/Object;");
-    if (!(jvpt->entry_item_ID)) {
-        throwIllegalState(env, "Couldn't find the VPEntry class's \"item\" member ID.");
-        return;
-    }
-    jvpt->entry_dist_ID = (*env)->GetFieldID(env, jvpt->entry_class, "distance", "D");
-    if (!(jvpt->entry_dist_ID)) {
-        throwIllegalState(env, "Couldn't find the VPEntry class's \"distance\" member ID.");
-        return;
-    }
-    ext_printf("Found and cached VPEntry<T> class, method, and field IDs.\n");
+#endif
 
     // Cache distance function information in the tree. This will be useful for building the tree.
     jclass dist_fn_class = (*env)->GetObjectClass(env, dist_fn);
+#if EXT_DEBUG
     if (!dist_fn_class) {
-        throwIllegalState(env, "Couldn't find the comparator's class.");
+        throwIllegalState(env, "Couldn't find the distance function's class.");
         return;
     }
+#endif
     jvpt->dist_fn_ID = (*env)->GetMethodID(env, dist_fn_class, "apply", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;");
+#if EXT_DEBUG
     if (!(jvpt->dist_fn_ID)) {
         throwIllegalState(env, "Couldn't find the distance function's ID.");
         return;
     }
+#endif
     jclass double_class = (*env)->FindClass(env, "java/lang/Double");
+#if EXT_DEBUG
     if (!double_class) {
         throwIllegalState(env, "Couldn't find the Double class.");
         return;
     }
+#endif
     jvpt->unwrap_double_ID = (*env)->GetMethodID(env, double_class, "doubleValue", "()D");
+#if EXT_DEBUG
     if (!(jvpt->unwrap_double_ID)) {
         throwIllegalState(env, "Couldn't find the doubleValue function's ID.");
         return;
     }
     ext_printf("Found distance function method ID, as well as the function for unwrapping java.lang.Double.\n");
+#endif
 
     // Cache the necessary information to call Arrays.toList()
-    jvpt->arrays_class = (*env)->FindClass(env, "java.util.Arrays");
-    if (!(jvpt->arrays_class)) {
+    jclass arrays_class = (*env)->FindClass(env, "java/util/Arrays");
+#if EXT_DEBUG
+    if (!arrays_class) {
         throwIllegalState(env, "Couldn't find the Arrays class.");
         return;
     }
-    jvpt->to_list_ID = (*env)->GetStaticMethodID(env, jvpt->arrays_class, "asList", "([Ljava/lang/Object;)Ljava/util/List;");
+#endif
+    jvpt->to_list_ID = (*env)->GetStaticMethodID(env, arrays_class, "asList", "([Ljava/lang/Object;)Ljava/util/List;");
+#if EXT_DEBUG
     if (!(jvpt->to_list_ID)) {
         throwIllegalState(env, "Couldn't find the asList() method ID.");
         return;
     }
+#endif
 
-    // Create the tree
-    ext_printf("Calling VPT_build.");
-    bool success = VPT_build(&(jvpt->vpt), datapoint_space, obj_array_size, jdist_fn, dist_fn);
+    // Create global references out of these values which will persist across JNI calls
+
+    this = (*env)->NewGlobalRef(env, this);
+#if EXT_DEBUG
+    if (!this) {
+        throwOOM(env, "Ran out of memory creating a global reference to the this VPTree.");
+        return;
+    }
+    ext_printf("Created a global ref to this.\n");
+#endif
+
+    dist_fn = (*env)->NewGlobalRef(env, dist_fn);
+#if EXT_DEBUG
+    if (!dist_fn) {
+        throwOOM(env, "Ran out of memory creating a global reference to the distance function.");
+        return;
+    }
+    ext_printf("Created a global ref to the distance function.\n");
+#endif
+
+    datapoints = (*env)->NewGlobalRef(env, datapoints);
+#if EXT_DEBUG
+    if (!datapoints) {
+        throwOOM(env, "Ran out of memory creating a global reference to the datapoints array.");
+        return;
+    }
+    ext_printf("Created a global ref to datapoints.\n");
+#endif
+
+    arrays_class = (*env)->NewGlobalRef(env, arrays_class);
+#if EXT_DEBUG
+    if (!entry_class) {
+        throwOOM(env, "Ran out of memory creating a global reference to the Arrays class.");
+        return;
+    }
+    ext_printf("Created a global ref to the Arrays class.\n");
+#endif
+
+    entry_class = (*env)->NewGlobalRef(env, entry_class);
+#if EXT_DEBUG
+    if (!entry_class) {
+        throwOOM(env, "Ran out of memory creating a global reference to the VPEntry<T> class.");
+        return;
+    }
+    ext_printf("Created a global ref to the VPEntry class.\n");
+#endif
+
+    // Finally, after all that preprocessing, put it in the tree.
+    jvpt->env = env;
+    jvpt->this = this;
+    jvpt->dist_fn = dist_fn;
+    jvpt->datapoints = datapoints;
+    jvpt->arrays_class = arrays_class;
+    jvpt->entry_class = entry_class;
+    ext_printf("References cached.\n");
+
+    // Create the C tree
+    bool success = VPT_build(&(jvpt->vpt), datapoint_space, obj_array_size, jdist_fn, jvpt);
     if (!success) {
         throwOOM(env, "Ran out of memory building the Vantage Point Tree.");
         return;
     }
     ext_printf("Tree created out of data points successfully.\n");
 
-    // Figure out where to put the pointer in the VPTree<T> Java object, and put it there.
+    // Transfer ownership of the jvpt C object to the VPTree<T> Java object.
     set_owned_jvpt(env, this, jvpt);
     free(datapoint_space);
 }
 
 static inline jobject
-to_VPEntry_obj(JNIEnv* env, JVPTree* jvpt, VPEntry nn) {
+new_VPEntry_jobject(JNIEnv* env, JVPTree* jvpt, VPEntry nn) {
     jobject item = (*env)->GetObjectArrayElement(env, jvpt->datapoints, nn.item);
 #if EXT_DEBUG
     if (!item) {
         ext_printf("Could not retrieve item %d from the array. Out of bounds?\n", nn.item);
         exit(2);
     }
+    ext_printf("Got object from array to put into VPEntry object.\n");
 #endif
     jobject ret = (*env)->NewObject(env, jvpt->entry_class, jvpt->entry_constructor, item, (jdouble)nn.distance);
 #if EXT_DEBUG
@@ -391,7 +437,10 @@ to_VPEntry_obj(JNIEnv* env, JVPTree* jvpt, VPEntry nn) {
         ext_printf("The VPEntry constructor failed somehow.\n");
         exit(2);
     }
+    ext_printf("Created a new VPEntry object.\n");
 #endif
+    (*env)->DeleteLocalRef(env, item);
+    ext_printf("Deleted the local ref to the item.\n");
     return ret;
 }
 
@@ -402,8 +451,11 @@ to_VPEntry_obj(JNIEnv* env, JVPTree* jvpt, VPEntry nn) {
  */
 JNIEXPORT jobject JNICALL
 Java_vptree_VPTree_nn(JNIEnv* env, jobject this, jobject datapoint) {
+    ext_printf("Starting JNI method: VPT_nn.\n");
+
     if (!datapoint) {
         throwIllegalArgument(env, "The datapoint cannot be null.");
+        return NULL;
     }
 
     JVPTree* jvpt = get_owned_jvpt(env, this);
@@ -411,12 +463,15 @@ Java_vptree_VPTree_nn(JNIEnv* env, jobject this, jobject datapoint) {
         throwIllegalState(env, "This VPTree has already been closed.");
         return NULL;
     }
+    ext_printf("Setting currently comparing.\n");
     jvpt->currently_comparing = datapoint;
 
+    ext_printf("Starting C nn.\n");
     VPEntry nn;
     VPT_nn(&(jvpt->vpt), -1, &nn);
+    ext_printf("C nn complete.\n");
 
-    return to_VPEntry_obj(env, jvpt, nn);
+    return new_VPEntry_jobject(env, jvpt, nn);
 }
 
 /*
@@ -426,34 +481,48 @@ Java_vptree_VPTree_nn(JNIEnv* env, jobject this, jobject datapoint) {
  */
 JNIEXPORT jobject JNICALL
 Java_vptree_VPTree_knn(JNIEnv* env, jobject this, jobject datapoint, jlong k) {
+    ext_printf("Starting JNI method: VPT_knn.\n");
     if (!datapoint) {
         throwIllegalArgument(env, "The datapoint cannot be null.");
+        return NULL;
+    }
+    if (k < 1) {
+        throwIllegalArgument(env, "k cannot be less than 1.");
     }
 
     JVPTree* jvpt = get_owned_jvpt(env, this);
-    if (!jvpt) {
-        throwIllegalState(env, "This VPTree has already been closed.");
-        return NULL;
-    }
     jvpt->currently_comparing = datapoint;
+
+    ext_printf("Starting C knn.\n");
 
     size_t num_found;
     VPEntry knns[k];
     VPTree* vpt = &(jvpt->vpt);
     VPT_knn(vpt, -1, (size_t)k, knns, &num_found);
     if (!num_found) return NULL;
+    ext_printf("C knn completed. Found %zu knns.\n", num_found);
 
-    jobjectArray knn_arr = (*env)->NewObjectArray(env, (jsize)num_found, jvpt->entry_class, NULL);
+    jsize array_size = (jsize)num_found;
+    jobjectArray knn_arr = (*env)->NewObjectArray(env, array_size, jvpt->entry_class, NULL);
     if (!knn_arr) {
         // already thrown
         return NULL;
     }
+    ext_printf("Created new object array.\n");
+
+    for (jsize i = 0; i < array_size; i++) {
+        jobject new_entry = new_VPEntry_jobject(env, jvpt, knns[i]);
+        (*env)->SetObjectArrayElement(env, knn_arr, (jsize)i, new_entry);
+    }
+    ext_printf("Filled the array with the entries that were found.\n");
 
     jobject knn_list = (*env)->CallStaticObjectMethod(env, jvpt->arrays_class, jvpt->to_list_ID, knn_arr);
+#if EXT_DEBUG
     if (!knn_list) {
         // already thrown
         return NULL;
     }
+#endif
 
     return knn_list;
 }
@@ -465,11 +534,8 @@ Java_vptree_VPTree_knn(JNIEnv* env, jobject this, jobject datapoint, jlong k) {
  */
 JNIEXPORT jint JNICALL
 Java_vptree_VPTree_size(JNIEnv* env, jobject this) {
+    ext_printf("Starting JNI method: VPT_size.\n");
     JVPTree* jvpt = get_owned_jvpt(env, this);
-    if (!jvpt) {
-        throwIllegalState(env, "This VPTree has already been closed.");
-        return 0;
-    }
     return (jint)(jvpt->vpt.size);
 }
 
@@ -479,7 +545,23 @@ Java_vptree_VPTree_size(JNIEnv* env, jobject this) {
  * Signature: ()V
  */
 JNIEXPORT void JNICALL
-Java_vptree_VPTree_close(JNIEnv* env, jobject this);
+Java_vptree_VPTree_close(JNIEnv* env, jobject this) {
+    ext_printf("Starting JNI method: VPT_close.\n");
+
+    JVPTree* jvpt = get_owned_jvpt(env, this);
+    set_owned_jvpt(env, this, NULL);
+
+    (*env)->DeleteGlobalRef(env, jvpt->this);
+    (*env)->DeleteGlobalRef(env, jvpt->dist_fn);
+    (*env)->DeleteGlobalRef(env, jvpt->datapoints);
+    (*env)->DeleteGlobalRef(env, jvpt->this);
+    (*env)->DeleteGlobalRef(env, jvpt->entry_class);
+    (*env)->DeleteGlobalRef(env, jvpt->arrays_class);
+
+    VPT_destroy(&(jvpt->vpt));
+    free(jvpt);
+    print_heap();
+}
 
 #ifdef __cplusplus
 }

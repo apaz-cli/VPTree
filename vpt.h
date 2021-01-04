@@ -194,6 +194,7 @@ VPT_build(VPTree* vpt, vpt_t* data, size_t num_items,
     // Allocate some space to help with sorting.
     VPEntry* scratch_space = malloc(num_entries * sizeof(VPEntry));
     if (!scratch_space) return NULL;
+    LOGs("Allocated scratch space.");
 
     // Split the list in half using the root as a vantage point.
     // Sort the list by distance to the root
@@ -564,9 +565,8 @@ VPT_knn(VPTree* vpt, vpt_t datapoint, size_t k, VPEntry* result_space, size_t* n
 
         // Node is a list
         else {
-            vpt_t* vplist = current_node->u.pointlist.items;
             size_t vplist_size = current_node->u.pointlist.size;
-
+            vpt_t* vplist = current_node->u.pointlist.items;
             for (size_t i = 0; i < vplist_size; i++) {
                 vplist_distances[i] = vpt->dist_fn(vpt->extra_data, vplist[i], datapoint);
             }
@@ -593,7 +593,7 @@ VPT_knn(VPTree* vpt, vpt_t datapoint, size_t k, VPEntry* result_space, size_t* n
             }
         }
     }
-    
+
     // Copy the results into the result space and return
     *num_results = knnlist_size;
     for (size_t i = 0; i < knnlist_size; i++) {
