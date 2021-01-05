@@ -25,10 +25,10 @@ JNIEXPORT jint JNICALL Java_vptree_VPTree_size
 
 /*
  * Class:     vptree_VPTree
- * Method:    close
- * Signature: ()V
+ * Method:    getItems
+ * Signature: ()[Ljava/lang/Object;
  */
-JNIEXPORT void JNICALL Java_vptree_VPTree_close
+JNIEXPORT jobjectArray JNICALL Java_vptree_VPTree_getItems
   (JNIEnv *, jobject);
 
 /*
@@ -46,6 +46,14 @@ JNIEXPORT jobject JNICALL Java_vptree_VPTree_nn
  */
 JNIEXPORT jobject JNICALL Java_vptree_VPTree_knn
   (JNIEnv *, jobject, jobject, jlong);
+
+/*
+ * Class:     vptree_VPTree
+ * Method:    close
+ * Signature: ()V
+ */
+JNIEXPORT void JNICALL Java_vptree_VPTree_close
+  (JNIEnv *, jobject);
 
 #ifdef __cplusplus
 }

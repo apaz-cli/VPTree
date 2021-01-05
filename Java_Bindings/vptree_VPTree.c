@@ -22,7 +22,7 @@ ext_printf(const char* fmt, ...) {
 #else
 
 static inline void
-ext_printf(const char* fmt, ...) {(void) fmt; }
+ext_printf(const char* fmt, ...) { (void)fmt; }
 
 #endif
 
@@ -32,7 +32,7 @@ extern "C" {
 
 #define ANSI_TERMINAL 0
 #define PRINT_MEMALLOCS 0
-#define MEMDEBUG 1
+#define MEMDEBUG 0
 #include "../memdebug.h/memdebug.h"
 
 #define DEBUG 0
@@ -525,6 +525,18 @@ Java_vptree_VPTree_knn(JNIEnv* env, jobject this, jobject datapoint, jlong k) {
 #endif
 
     return knn_list;
+}
+
+/*
+ * Class:     vptree_VPTree
+ * Method:    getItems
+ * Signature: ()[Ljava/lang/Object;
+ */
+JNIEXPORT jobjectArray JNICALL 
+Java_vptree_VPTree_getItems(JNIEnv* env, jobject this) {
+    ext_printf("Starting JNI method: VPT_knn.\n");
+    JVPTree* jvpt = get_owned_jvpt(env, this);
+    return jvpt->datapoints;
 }
 
 /*

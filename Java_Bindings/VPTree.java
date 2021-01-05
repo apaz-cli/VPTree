@@ -49,15 +49,19 @@ public class VPTree<T> implements Closeable {
 		return vpt_ptr != 0;
 	}
 
-	/** Returns the size of this tree. */
+	/**
+	 * @return The number of items in this tree.
+	 */
 	public native int size();
 
 	/**
-	 * Frees the memory allocated for this tree. You must close the tree once you
-	 * are done with it.
+	 * Returns the items of the collection that were used to build the tree. This
+	 * does not close the tree, and the tree does not give up its reference to the
+	 * array of items.
+	 * 
+	 * @return items The items of the collection
 	 */
-	@Override
-	public native void close();
+	public native T[] getItems();
 
 	/**
 	 * @param queryPoint The query point to find the nearest neighbor to
@@ -75,9 +79,16 @@ public class VPTree<T> implements Closeable {
 	 * 
 	 * @param queryPoint The query point
 	 * @param k          The number of nearest neighbors to return
-	 * @return knnlist A list of the min(this.size(), k) closest points in the tree
-	 *         to the query point.
+	 * @return knnlist A list of the Math.min(this.size(), k) closest points in the
+	 *         tree to the query point.
 	 */
 	public native List<VPEntry<T>> knn(T queryPoint, long k);
+
+	/**
+	 * Frees the memory allocated for this tree. You must close the tree once you
+	 * are done with it.
+	 */
+	@Override
+	public native void close();
 
 }

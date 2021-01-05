@@ -86,6 +86,16 @@ typedef struct VPBuildStackFrame VPBuildStackFrame;
 /* Sort (Necessary for tree build) */
 /***********************************/
 
+static inline size_t
+min(size_t x, size_t y) {
+    return x < y ? x : y;
+}
+
+static inline size_t
+max(size_t x, size_t y) {
+    return x > y ? x : y;
+}
+
 #include "vpsort.h"
 
 /*******************************/
@@ -114,16 +124,6 @@ alloc_VPNode(VPTree* vpt) {
 
     LOGs("Allocated node.");
     return nodeptr;
-}
-
-static inline size_t
-min(size_t x, size_t y) {
-    return x < y ? x : y;
-}
-
-static inline size_t
-max(size_t x, size_t y) {
-    return x > y ? x : y;
 }
 
 static inline bool

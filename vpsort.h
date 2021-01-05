@@ -19,7 +19,9 @@ struct VPEntry {
 typedef struct VPEntry VPEntry;
 #endif /*__VPTree*/
 
-// Debug assertions
+/********************/
+/* Debug Assertions */
+/********************/
 #if DEBUG
 void assert_absolutely_sorted(VPEntry* arr, size_t n, vpt_t datapoint, VPTree* tree) {
     for (size_t i = 1; i < n; i++) {
