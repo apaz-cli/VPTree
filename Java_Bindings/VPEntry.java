@@ -14,9 +14,16 @@ public class VPEntry<T> {
 		return new StringBuilder()
 				.append('<')
 				.append(this.item.toString())
-				.append(',')
+				.append(", ")
 				.append(this.distance)
 				.append('>')
 				.toString();
+	}
+
+	@Override
+	public boolean equals(Object o) {
+		if (!(o instanceof VPEntry<?>)) return false;
+		VPEntry<?> other = (VPEntry<?>) o;
+		return this.item.equals(other.item) && (this.distance == other.distance);
 	}
 }

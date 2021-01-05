@@ -11,7 +11,7 @@ public class VPTree<T> implements Closeable {
 	}
 
 	// Native method VPT_build allocates memory for persistent storage and stores
-	// the location here.
+	// the location here. Do not remove this, or things will break.
 	private long vpt_ptr = 0L;
 
 	/**
@@ -85,8 +85,8 @@ public class VPTree<T> implements Closeable {
 	public native List<VPEntry<T>> knn(T queryPoint, long k);
 
 	/**
-	 * Frees the memory allocated for this tree. You must close the tree once you
-	 * are done with it.
+	 * Frees the native memory allocated for this tree. You must close the tree once
+	 * you are done with it.
 	 */
 	@Override
 	public native void close();
