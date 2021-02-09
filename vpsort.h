@@ -100,7 +100,6 @@ void mergesort(VPEntry* arr, size_t n, VPEntry* scratch_space) {
     }
 
     // Start threads
-    // Hopefully this loop gets unrolled by the compiler
     for (i = 0; i < num_threads - 1; i++) {
         sublists[i].arr = arr + start;
         sublists[i].n = each;
@@ -129,7 +128,6 @@ void mergesort(VPEntry* arr, size_t n, VPEntry* scratch_space) {
     (void)(big.item);
 
     // Merge the arrays
-    // Here too, I hope that the compiler is going ham.
     for (i = 0; i < n; i++) {
         smallest = big;
         for (j = 0; j < num_threads; j++) {

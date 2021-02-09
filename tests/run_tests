@@ -8,7 +8,8 @@ clang -lm -lpthread -Ofast -march=native -g -fsanitize=address vpt_reclaim_test.
 ./a.out
 echo 'vpt_reclaim_test completed.'
 
-clang -lm -lpthread -Ofast -march=native -g -fsanitize=address vpt_sizes_test.c
+# Remove -fsanitize=address because of bug/feature limitation in asan. It cannot track the lifetime of more than a few million threads.
+clang -lm -lpthread -Ofast -march=native -g vpt_sizes_test.c
 ./a.out
 echo 'vpt_sizes_test completed.'
 

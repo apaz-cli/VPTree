@@ -18,7 +18,7 @@
 #define VPT_MAX_LIST_SIZE 1000
 
 #define NODEALLOC_BUF_SIZE 1000
-// #define LISTALLOC_BUF_SIZE 100000
+#define LISTALLOC_BUF_SIZE 1000000
 
 /**********************/
 /* Struct Definitions */
@@ -60,10 +60,24 @@ struct NodeAllocs {
     NodeAllocs* next;
 };
 
+struct ListAllocs;
+typedef struct ListAllocs ListAllocs;
+struct ListAllocs {
+    vpt_t buffer[LISTALLOC_BUF_SIZE];
+    size_t size;
+    ListAllocs* next;
+};
+
+struct VPAllocator {
+    NodeAllocs* node_allocs;
+    ListAllocs* list_allocs;
+};
+typedef struct VPAllocator VPAllocator;
+
 struct VPTree {
     VPNode* root;
     size_t size;
-    NodeAllocs* node_allocs;
+    VPAllocator allocator;
     void* extra_data;
     double (*dist_fn)(void* extra_data, vpt_t first, vpt_t second);
 };
@@ -98,23 +112,23 @@ max(size_t x, size_t y) {
 
 #include "vpsort.h"
 
-/*******************************/
-/* Optimized Memory Allocators */
-/*******************************/
+/******************************/
+/* Optimized Memory Allocator */
+/******************************/
 
 static inline VPNode*
-alloc_VPNode(VPTree* vpt) {
-    // Get the current allocation list. If the one currently stored is full, build another off of it.
-    NodeAllocs* alloc_list = vpt->node_allocs;
+alloc_VPNode(VPAllocator* allocator) {
+    // Get the current allocator struct. If the one currently stored is full, build another off of it and use that instead.
+    NodeAllocs* alloc_list = allocator->node_allocs;
     if (alloc_list->size == NODEALLOC_BUF_SIZE - 1) {
         // Create an empty list and point it at the vptree's.
         NodeAllocs* new_list = malloc(sizeof(NodeAllocs));
         if (!new_list) return NULL;
         new_list->size = 0;
-        new_list->next = vpt->node_allocs;
+        new_list->next = allocator->node_allocs;
 
         // Replace the vptree allocation list
-        vpt->node_allocs = new_list;
+        allocator->node_allocs = new_list;
         alloc_list = new_list;
     }
 
@@ -122,18 +136,45 @@ alloc_VPNode(VPTree* vpt) {
     VPNode* nodeptr = alloc_list->buffer + alloc_list->size;
     alloc_list->size++;
 
-    LOGs("Allocated node.");
+    debug_printf("Allocated node.\n");
     return nodeptr;
+}
+
+static inline vpt_t*
+alloc_VPList_buffer(VPAllocator* allocator, size_t buf_size) {
+    // There's currently no way for this to happen.
+    // if (buf_size > LISTALLOC_BUF_SIZE-1) return NULL;
+
+    // Get the current VPList allocator
+    ListAllocs* list_allocs = allocator->list_allocs;
+    if (list_allocs->size + buf_size >= LISTALLOC_BUF_SIZE - 1) {
+        // Create a new one if the old one would be overflown
+        ListAllocs* new_list = malloc(sizeof(ListAllocs));
+        if (!new_list) return NULL;
+        new_list->size = 0;
+        new_list->next = allocator->list_allocs;
+
+        // Replace the one in the allocator with the new one and use it instead.
+        allocator->list_allocs = new_list;
+        list_allocs = new_list;
+    }
+
+    // Return a pointer to the start of the available memory space.
+    vpt_t* allocated_list = (*list_allocs).buffer + list_allocs->size;
+    list_allocs->size += buf_size;
+
+    debug_printf("Allocated a VPList buffer of size %zu.\n", buf_size);
+    return allocated_list;
 }
 
 static inline bool
 __VPT_small_build(VPTree* vpt, vpt_t* data, size_t num_items) {
-    vpt->root = alloc_VPNode(vpt);
+    vpt->root = alloc_VPNode(&(vpt->allocator));
     if (!vpt->root) return NULL;
     vpt->root->ulabel = 'l';
     vpt->root->u.pointlist.size = num_items;
     vpt->root->u.pointlist.capacity = VPT_MAX_LIST_SIZE;
-    vpt->root->u.pointlist.items = malloc(vpt->root->u.pointlist.capacity * sizeof(vpt_t));
+    vpt->root->u.pointlist.items = alloc_VPList_buffer(&(vpt->allocator), vpt->root->u.pointlist.capacity);
     if (!vpt->root->u.pointlist.items) return NULL;
     for (size_t i = 0; i < num_items; i++) {
         vpt->root->u.pointlist.items[i] = data[i];
@@ -152,10 +193,17 @@ VPT_build(VPTree* vpt, vpt_t* data, size_t num_items,
     vpt->size = num_items;
     vpt->dist_fn = dist_fn;
     vpt->extra_data = extra_data;
-    vpt->node_allocs = malloc(sizeof(NodeAllocs));
-    if (!vpt->node_allocs) return NULL;
-    vpt->node_allocs->size = 0;
-    vpt->node_allocs->next = NULL;
+
+    /* Init allocator */
+    vpt->allocator.node_allocs = malloc(sizeof(NodeAllocs));
+    if (!vpt->allocator.node_allocs) return NULL;
+    vpt->allocator.node_allocs->size = 0;
+    vpt->allocator.node_allocs->next = NULL;
+
+    vpt->allocator.list_allocs = malloc(sizeof(ListAllocs));
+    if (!vpt->allocator.list_allocs) return NULL;
+    vpt->allocator.list_allocs->size = 0;
+    vpt->allocator.list_allocs->next = NULL;
 
     if (num_items < VPT_MAX_LIST_SIZE) {
         LOG("Building small tree of size %lu.\n", num_items)
@@ -216,7 +264,7 @@ VPT_build(VPTree* vpt, vpt_t* data, size_t num_items,
     left_children = entry_list;
 
     // Set the node.
-    newnode = alloc_VPNode(vpt);
+    newnode = alloc_VPNode(&(vpt->allocator));
     if (!newnode) return NULL;
     newnode->ulabel = 'b';
     newnode->u.branch.item = sort_by;
@@ -251,11 +299,11 @@ VPT_build(VPTree* vpt, vpt_t* data, size_t num_items,
             if (popped.num_children < VPT_BUILD_LIST_THRESHOLD) {
                 // Find a smarter way to allocate memory than by peppering the heap
                 // with like 5 million individually allocated nodes
-                newnode = alloc_VPNode(vpt);
+                newnode = alloc_VPNode(&(vpt->allocator));
                 if (!newnode) return NULL;
                 newnode->ulabel = 'l';
                 newnode->u.pointlist.size = newnode->u.pointlist.capacity = popped.num_children;
-                newnode->u.pointlist.items = malloc(popped.num_children * sizeof(vpt_t));
+                newnode->u.pointlist.items = alloc_VPList_buffer(&(vpt->allocator), popped.num_children);
                 if (!newnode->u.pointlist.items) return NULL;
                 for (i = 0; i < popped.num_children; i++) {
                     newnode->u.pointlist.items[i] = popped.children[i].item;
@@ -266,7 +314,7 @@ VPT_build(VPTree* vpt, vpt_t* data, size_t num_items,
 
             // Inductive case, build node and push more information
             else {
-                newnode = alloc_VPNode(vpt);
+                newnode = alloc_VPNode(&(vpt->allocator));
                 if (!newnode) return NULL;
 
                 // Pop the first child off the list and into the new node
@@ -321,13 +369,13 @@ VPT_build(VPTree* vpt, vpt_t* data, size_t num_items,
             /********************/
 
             if (popped.num_children < VPT_BUILD_LIST_THRESHOLD) {
-                newnode = alloc_VPNode(vpt);
+                newnode = alloc_VPNode(&(vpt->allocator));
                 if (!newnode) return NULL;
 
                 newnode->ulabel = 'l';
                 newnode->u.pointlist.size = popped.num_children;
                 newnode->u.pointlist.capacity = popped.num_children;
-                newnode->u.pointlist.items = malloc(popped.num_children * sizeof(vpt_t));
+                newnode->u.pointlist.items = alloc_VPList_buffer(&(vpt->allocator), popped.num_children);
                 for (i = 0; i < popped.num_children; i++) {
                     newnode->u.pointlist.items[i] = popped.children[i].item;
                 }
@@ -337,7 +385,7 @@ VPT_build(VPTree* vpt, vpt_t* data, size_t num_items,
 
             // Inductive case, build node and push more information
             else {
-                newnode = alloc_VPNode(vpt);
+                newnode = alloc_VPNode(&(vpt->allocator));
                 if (!newnode) return NULL;
 
                 // Pop the first child off the list and into the new node
@@ -395,17 +443,18 @@ VPT_build(VPTree* vpt, vpt_t* data, size_t num_items,
  */
 static inline void
 VPT_destroy(VPTree* vpt) {
-    NodeAllocs* alloc_list = vpt->node_allocs;
-    while (alloc_list) {
-        for (size_t i = 0; i < alloc_list->size; i++) {
-            VPNode node = alloc_list->buffer[i];
-            if (node.ulabel == 'l') {
-                free(node.u.pointlist.items);
-            }
-        }
-        NodeAllocs* consumed_alloc_list = alloc_list;
-        alloc_list = alloc_list->next;
-        free(consumed_alloc_list);
+    NodeAllocs* node_allocs = vpt->allocator.node_allocs;
+    while (node_allocs) {
+        NodeAllocs* consumed_node_allocs = node_allocs;
+        node_allocs = node_allocs->next;
+        free(consumed_node_allocs);
+    }
+
+    ListAllocs* list_allocs = vpt->allocator.list_allocs;
+    while (list_allocs) {
+        ListAllocs* consumed_list_allocs = list_allocs;
+        list_allocs = list_allocs->next;
+        free(consumed_list_allocs);
     }
 
     LOGs("Tree destruction complete.");
@@ -423,15 +472,15 @@ VPT_teardown(VPTree* vpt) {
     size_t all_size = 0;
     vpt_t* all_items = malloc(sizeof(vpt_t) * vpt->size);
     if (!all_items) {
-        LOGs("Failed to allocate memory to store data from the tree. Cannot return items, tearing down instead.");
+        debug_printf("Failed to allocate memory to store data from the tree. Cannot return items, tearing down instead.\n");
         VPT_destroy(vpt);
         return NULL;
     }
 
-    NodeAllocs* alloc_list = vpt->node_allocs;
-    while (alloc_list) {
-        for (size_t i = 0; i < alloc_list->size; i++) {
-            VPNode node = alloc_list->buffer[i];
+    NodeAllocs* node_allocs = vpt->allocator.node_allocs;
+    while (node_allocs) {
+        for (size_t i = 0; i < node_allocs->size; i++) {
+            VPNode node = node_allocs->buffer[i];
             if (node.ulabel == 'b') {
                 vpt_t item = node.u.branch.item;
                 all_items[all_size++] = item;
@@ -441,12 +490,18 @@ VPT_teardown(VPTree* vpt) {
                     vpt_t item = node.u.pointlist.items[j];
                     all_items[all_size++] = item;
                 }
-                free(node.u.pointlist.items);
             }
         }
-        NodeAllocs* consumed_alloc_list = alloc_list;
-        alloc_list = alloc_list->next;
+        NodeAllocs* consumed_alloc_list = node_allocs;
+        node_allocs = node_allocs->next;
         free(consumed_alloc_list);
+    }
+
+    ListAllocs* list_allocs = vpt->allocator.list_allocs;
+    while (list_allocs) {
+        ListAllocs* consumed_list_allocs = list_allocs;
+        list_allocs = list_allocs->next;
+        free(consumed_list_allocs);
     }
 
     // Assert all_size == vpt->size

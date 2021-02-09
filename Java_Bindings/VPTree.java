@@ -18,9 +18,10 @@ public class VPTree<T> implements Closeable {
 	 * Creates a Vantage Point Tree out of the items from the given collection.
 	 * 
 	 * The distance function may not return null. It also may not throw an
-	 * exception.
+	 * exception. Violating these conditions is undefined behavior.
 	 * 
-	 * This data structure provides no guaruntee of thread safety.
+	 * This data structure provides no guaruntee of thread safety. It must be
+	 * externally synchronized.
 	 * 
 	 * For performance reasons, we do not check for exceptions after calling the
 	 * distance function inside the native code. Therefore, it's recommended that
@@ -34,10 +35,10 @@ public class VPTree<T> implements Closeable {
 	 * anyway. But if it happens, it may not crash in the way that you're used to.
 	 * 
 	 * @param coll
-	 * @param distFn_noexcept
+	 * @param distFn_nonnull_noexcept
 	 */
-	public VPTree(Collection<T> coll, BiFunction<T, T, Double> distFn_noexcept) {
-		VPT_build(coll.toArray(), distFn_noexcept);
+	public VPTree(Collection<T> coll, BiFunction<T, T, Double> distFn_nonnull_noexcept) {
+		VPT_build(coll.toArray(), distFn_nonnull_noexcept);
 	}
 
 	private native void VPT_build(Object[] objArr, BiFunction<T, T, Double> distFn);
