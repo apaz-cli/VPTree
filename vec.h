@@ -1,5 +1,7 @@
 #ifndef __VEC
 #define __VEC
+#include <stdbool.h>
+#include <math.h>
 
 #ifndef VECDIM
 #define VECDIM 64

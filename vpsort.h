@@ -6,18 +6,6 @@
 
 #include "log.h"
 
-// To appease the linter. This is never active.
-#ifndef __VPTree
-#ifndef vpt_t
-#define vpt_t void*
-#endif /*vpt_t*/
-
-struct VPEntry {
-    vpt_t* item;
-    double distance;
-};
-typedef struct VPEntry VPEntry;
-#endif /*__VPTree*/
 
 /********************/
 /* Debug Assertions */
@@ -58,7 +46,8 @@ void shellsort(VPEntry* arr, size_t n) {
     for (interval = n / 2; interval > 0; interval /= 2) {
         for (i = interval; i < n; i += 1) {
             temp = arr[i];
-            for (j = i; j >= interval && arr[j - interval].distance > temp.distance; j -= interval) {
+            j = i;
+            for (; j >= interval && arr[j - interval].distance > temp.distance; j -= interval) {
                 arr[j] = arr[j - interval];
             }
             arr[j] = temp;
