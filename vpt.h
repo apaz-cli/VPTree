@@ -602,7 +602,7 @@ bool VPT_rebuild(VPTree* vpt) {
  * 
  * You are expected to provide the buffer result_space, which the results are 
  * written to. It should be of size equal to or greater than the size of 
- * "VPEntry result_space[k];", which is to say (k * sizeof(VPEntry*)) bytes.
+ * "VPEntry result_space[k];", which is to say (k * sizeof(VPEntry)) bytes.
  * 
  * The number of results found is written to num_results.
  */
