@@ -226,6 +226,7 @@ __knnlist_push(VPEntry* knnlist, size_t knnlist_size, VPEntry to_add) {
  * set of possible items forms a metric space with distance 
  * function dist_fn. You should #define vpt_t to be the type 
  * that the tree should store before you #include "vpt.h".
+ * If you don't, the default is void*.
  * 
  * @param vpt The Vantage Point Tree to build.
  * @param data A pointer to the data to construct the tree out of. 
