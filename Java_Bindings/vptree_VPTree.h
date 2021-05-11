@@ -49,6 +49,14 @@ JNIEXPORT jobject JNICALL Java_vptree_VPTree_knn
 
 /*
  * Class:     vptree_VPTree
+ * Method:    all_within
+ * Signature: (Ljava/lang/Object;D)Ljava/util/List;
+ */
+JNIEXPORT jobject JNICALL Java_vptree_VPTree_all_1within
+  (JNIEnv *, jobject, jobject, jdouble);
+
+/*
+ * Class:     vptree_VPTree
  * Method:    close
  * Signature: ()V
  */

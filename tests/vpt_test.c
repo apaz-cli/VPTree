@@ -16,7 +16,7 @@
 #define PRINT_MEMALLOCS 0
 #include "../memdebug.h/memdebug.h"
 
-#define NUM_ENTRIES 1200000
+#define NUM_ENTRIES 120000
 #define VECDIM 32
 #include "../vec.h"
 
@@ -116,6 +116,40 @@ nn_test(VPTree* vpt, vpt_t* query_point) {
     return true;
 }
 
+static inline bool
+add_rebuild_test(VPTree* vpt, vpt_t* to_add, size_t num_to_add) {
+    bool success = VPT_add_rebuild(vpt, to_add, num_to_add);
+    if (PRINT_STEPS) {
+        printf("Rebuilt with %zu extra datapoints.\n", num_to_add);
+    }
+    free(to_add);
+    return success;
+}
+
+static inline bool
+all_within_test(VPTree* vpt, vpt_t* query, dist_t max_dist, vpt_t* original_entries) {
+    // VPTree* vpt, vpt_t datapoint, dist_t max_dist, VPEntry** result_space, size_t* num_results
+    VPEntry* result = NULL;
+    size_t num_results = 0;
+    bool success = VPT_all_within(vpt, *query, max_dist, &result, &num_results);
+    if (PRINT_STEPS) {
+        printf("Found %zu datapoints within %f of the query point.\n", num_results, max_dist);
+    }
+
+    // Now calculate it the normal way, and assert the results are the same.
+    size_t num_results_normal = 0;
+    for (int i = 0; i < NUM_ENTRIES; i++) {
+        dist_t dist = VEC_distance(NULL, *query, original_entries[i]);
+        if (dist <= max_dist) { num_results_normal++; }
+    }
+
+    assert(num_results == num_results_normal);
+
+    free(query);
+    free(result);
+    return success;
+}
+
 int main() {
     // Generate some random data
     srand(time(0));
@@ -156,10 +190,25 @@ int main() {
         return 1;
     }
 
+    // All Within
+    success = all_within_test(&vpt, gen_entries(1), 80.0, entries);
+    if (!success) {
+        printf("Ran out of memory during tree all_within.\n");
+        return 1;
+    }
+
     // Rebuild
     success = VPT_rebuild(&vpt);
     if (!success) {
         printf("Ran out of memory rebuilding the tree.\n");
+        return 1;
+    }
+
+    // Add_Rebuild
+    size_t num_new_entries = 10000;
+    success = add_rebuild_test(&vpt, gen_entries(num_new_entries), num_new_entries);
+    if (!success) {
+        printf("Ran out of memory rebuilding the tree with extra datapoints.\n");
         return 1;
     }
 
@@ -168,6 +217,7 @@ int main() {
     free(entries);
 
     // Assert no memory leaks
+    // print_heap();
     assert(!get_num_allocs());
 }
 #endif

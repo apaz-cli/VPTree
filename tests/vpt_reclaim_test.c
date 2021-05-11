@@ -34,10 +34,9 @@ void test(size_t num_datapoints) {
     }
     free(torn);
 
-    print_heap();
     assert(!get_num_allocs());
 }
 
 int main() {
-    test(10000000);
+    test(100000);
 }

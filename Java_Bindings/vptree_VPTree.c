@@ -39,7 +39,10 @@ extern "C" {
 /**********/
 /* VPTree */
 /**********/
+#include <math.h>
 #define vpt_t jint
+#define dist_t double
+#define DIST_MAX INFINITY
 #include "../vpt.h"
 
 struct JVPTree {
@@ -66,6 +69,8 @@ struct JVPTree {
 };
 typedef struct JVPTree JVPTree;
 
+// If the second index is -1, it grabs the one stored in the tree by the 
+// calling binding method. Otherwise it gets it as normal.
 double jdist_fn(void* extra_data, jint first_idx, jint second_idx) {
     JNIEnv* env = ((JVPTree*)extra_data)->env;
     jobject dist_fn = ((JVPTree*)extra_data)->dist_fn;
@@ -512,7 +517,7 @@ Java_vptree_VPTree_knn(JNIEnv* env, jobject this, jobject datapoint, jlong k) {
 
     for (jsize i = 0; i < array_size; i++) {
         jobject new_entry = new_VPEntry_jobject(env, jvpt, knns[i]);
-        (*env)->SetObjectArrayElement(env, knn_arr, (jsize)i, new_entry);
+        (*env)->SetObjectArrayElement(env, knn_arr, i, new_entry);
     }
     ext_printf("Filled the array with the entries that were found.\n");
 
@@ -549,6 +554,64 @@ Java_vptree_VPTree_size(JNIEnv* env, jobject this) {
     ext_printf("Starting JNI method: VPT_size.\n");
     JVPTree* jvpt = get_owned_jvpt(env, this);
     return (jint)(jvpt->vpt.size);
+}
+
+/*
+ * Class:     vptree_VPTree
+ * Method:    all_within
+ * Signature: (Ljava/lang/Object;D)Ljava/util/List;
+ */
+JNIEXPORT jobject JNICALL
+Java_vptree_VPTree_all_1within(JNIEnv* env, jobject this, jobject datapoint, jdouble max_dist) {
+    ext_printf("Starting JNI method: VPT_all_within.\n");
+
+    if (!datapoint) {
+        throwIllegalArgument(env, "The datapoint cannot be null.");
+        return NULL;
+    }
+    if (max_dist < 0) {
+        throwIllegalArgument(env, "max_dist cannot be less than 0.");
+    }
+
+    // Grab the tree and put the query point inside it, as with knn.
+    JVPTree* jvpt = get_owned_jvpt(env, this);
+    jvpt->currently_comparing = datapoint;
+
+    ext_printf("Starting C all_within.\n");
+
+    // Create space for results
+    size_t num_found;
+    VPEntry* results = NULL;
+    VPTree* vpt = &(jvpt->vpt);
+
+    // Run all_within
+    VPT_all_within(vpt, -1, (dist_t)max_dist, &results, &num_found);
+    if (!num_found) return NULL;
+    ext_printf("C all_within completed. Found %zu results within %f of the query point.\n", num_found, max_dist);
+
+    jsize array_size = (jsize)num_found;
+    jobjectArray within_arr = (*env)->NewObjectArray(env, array_size, jvpt->entry_class, NULL);
+    if (!within_arr) {
+        // already thrown
+        return NULL;
+    }
+    ext_printf("Created new object array.\n");
+
+    for (jsize i = 0; i < array_size; i++) {
+        jobject new_entry = new_VPEntry_jobject(env, jvpt, results[i]);
+        (*env)->SetObjectArrayElement(env, within_arr, i, new_entry);
+    }
+    ext_printf("Filled the array with the entries that were found.\n");
+
+    jobject within_list = (*env)->CallStaticObjectMethod(env, jvpt->arrays_class, jvpt->to_list_ID, within_arr);
+#if EXT_DEBUG
+    if (!within_list) {
+        // already thrown
+        return NULL;
+    }
+#endif
+
+    return within_list;
 }
 
 /*

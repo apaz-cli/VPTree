@@ -86,6 +86,17 @@ public class VPTree<T> implements Closeable {
 	public native List<VPEntry<T>> knn(T queryPoint, long k);
 
 	/**
+	 * Searches the tree for all points withing max_dist of the query point, and
+	 * returns returns them and the distance to them.
+	 * 
+	 * @param queryPoint The point to get items close to.
+	 * @param max_dist The maximum distance from the query point to the items retrieved.
+	 * @return withinlist A list of all the points p in the tree for which
+	 *         dist_Fn(queryPoint, p) <= max_dist, along with the distances to those points.
+	 */
+	public native List<VPEntry<T>> all_within(T queryPoint, double max_dist);
+
+	/**
 	 * Frees the native memory allocated for this tree. You must close the tree once
 	 * you are done with it.
 	 */

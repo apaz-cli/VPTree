@@ -1,4 +1,4 @@
-#define PRINT_STEPS 1
+#define PRINT_STEPS 0
 
 #define MEMDEBUG 0
 #define PRINT_MEMALLOCS 0
@@ -77,7 +77,7 @@ void test(void* argstruct) {
 #include "threadpool.h/threadpool.h"
 
 int main() {
-    const size_t num_trees = 100000;
+    const size_t num_trees = 10000;
 
     srand(time(0));
     ArgStruct* args = malloc(num_trees * sizeof(ArgStruct));
@@ -90,9 +90,7 @@ int main() {
 
     Threadpool pool;
     POOL_create(&pool, 16);
-
     for (size_t i = 0; i < num_trees; i++) {
-        size_t treesize = i + 1;
         POOL_exectask(&pool, test, args + i);
     }
     POOL_destroy(&pool);

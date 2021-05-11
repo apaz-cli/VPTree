@@ -6,6 +6,7 @@
 #include "../vec.h"
 
 #define vpt_t VEC
+#define dist_t double
 #include "../vpt.h"
 
 #define NUM_DATAPOINTS 3000000
