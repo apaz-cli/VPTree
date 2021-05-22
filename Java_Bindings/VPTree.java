@@ -10,10 +10,6 @@ public class VPTree<T> implements Closeable {
 		System.loadLibrary("JVPTree");
 	}
 
-	// Native method VPT_build allocates memory for persistent storage and stores
-	// the location here. Do not remove this, or things will break.
-	private long vpt_ptr = 0L;
-
 	/**
 	 * Creates a Vantage Point Tree out of the items from the given collection.
 	 * 
@@ -41,7 +37,7 @@ public class VPTree<T> implements Closeable {
 		VPT_build(coll.toArray(), distFn_nonnull_noexcept);
 	}
 
-	private native void VPT_build(Object[] objArr, BiFunction<T, T, Double> distFn);
+	public native void rebuild();
 
 	/**
 	 * @return true if this tree is open, false if not.
@@ -55,14 +51,14 @@ public class VPTree<T> implements Closeable {
 	 */
 	public native int size();
 
-	/**
-	 * Returns the items of the collection that were used to build the tree. This
-	 * does not close the tree, and the tree does not give up its reference to the
-	 * array of items.
-	 * 
-	 * @return items The items of the collection
-	 */
-	public native T[] getItems();
+	///**
+	// * Returns the items of the collection that were used to build the tree. This
+	// * does not close the tree, and the tree does not give up its reference to the
+	// * array of items.
+	// * 
+	// * @return items The items of the collection
+	// */
+	//public native T[] getItems();
 
 	/**
 	 * @param queryPoint The query point to find the nearest neighbor to
@@ -90,11 +86,28 @@ public class VPTree<T> implements Closeable {
 	 * returns returns them and the distance to them.
 	 * 
 	 * @param queryPoint The point to get items close to.
-	 * @param max_dist The maximum distance from the query point to the items retrieved.
+	 * @param max_dist   The maximum distance from the query point to the items
+	 *                   retrieved.
 	 * @return withinlist A list of all the points p in the tree for which
-	 *         dist_Fn(queryPoint, p) <= max_dist, along with the distances to those points.
+	 *         dist_Fn(queryPoint, p) <= max_dist, along with the distances to those
+	 *         points.
 	 */
 	public native List<VPEntry<T>> all_within(T queryPoint, double max_dist);
+
+	/**
+	 * Adds the given point to this Vantage Point Tree.
+	 * 
+	 * Note that no considerations are given for balancing the tree. If you add too
+	 * many items this way, searching the tree will become inefficient. In that
+	 * case, either call addRebuild() instead, or rebuild().
+	 * 
+	 * @param datapoint The point to add to the tree.
+	 */
+	public native void add(T datapoint);
+
+	public void addRebuild(Collection<T> datapoints) {
+		VPT_addRebuild(datapoints.toArray());
+	}
 
 	/**
 	 * Frees the native memory allocated for this tree. You must close the tree once
@@ -102,5 +115,19 @@ public class VPTree<T> implements Closeable {
 	 */
 	@Override
 	public native void close();
+
+	private native void VPT_build(Object[] objArr, BiFunction<T, T, Double> distFn);
+
+	private native void VPT_addRebuild(Object[] datapoints);
+
+	/********************************************/
+	/* The following looks useless, but is not. */
+	/* Native code depends on it. Do not touch. */
+	/* If you do, things will break.            */
+	/********************************************/
+
+	// Native method VPT_build allocates memory for persistent storage and stores
+	// the location here. Do not remove this, or things will break.
+	private long vpt_ptr = 0L;
 
 }

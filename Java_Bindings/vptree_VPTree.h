@@ -9,11 +9,11 @@ extern "C" {
 #endif
 /*
  * Class:     vptree_VPTree
- * Method:    VPT_build
- * Signature: ([Ljava/lang/Object;Ljava/util/function/BiFunction;)V
+ * Method:    rebuild
+ * Signature: ()V
  */
-JNIEXPORT void JNICALL Java_vptree_VPTree_VPT_1build
-  (JNIEnv *, jobject, jobjectArray, jobject);
+JNIEXPORT void JNICALL Java_vptree_VPTree_rebuild
+  (JNIEnv *, jobject);
 
 /*
  * Class:     vptree_VPTree
@@ -21,14 +21,6 @@ JNIEXPORT void JNICALL Java_vptree_VPTree_VPT_1build
  * Signature: ()I
  */
 JNIEXPORT jint JNICALL Java_vptree_VPTree_size
-  (JNIEnv *, jobject);
-
-/*
- * Class:     vptree_VPTree
- * Method:    getItems
- * Signature: ()[Ljava/lang/Object;
- */
-JNIEXPORT jobjectArray JNICALL Java_vptree_VPTree_getItems
   (JNIEnv *, jobject);
 
 /*
@@ -57,11 +49,35 @@ JNIEXPORT jobject JNICALL Java_vptree_VPTree_all_1within
 
 /*
  * Class:     vptree_VPTree
+ * Method:    add
+ * Signature: (Ljava/lang/Object;)V
+ */
+JNIEXPORT void JNICALL Java_vptree_VPTree_add
+  (JNIEnv *, jobject, jobject);
+
+/*
+ * Class:     vptree_VPTree
  * Method:    close
  * Signature: ()V
  */
 JNIEXPORT void JNICALL Java_vptree_VPTree_close
   (JNIEnv *, jobject);
+
+/*
+ * Class:     vptree_VPTree
+ * Method:    VPT_build
+ * Signature: ([Ljava/lang/Object;Ljava/util/function/BiFunction;)V
+ */
+JNIEXPORT void JNICALL Java_vptree_VPTree_VPT_1build
+  (JNIEnv *, jobject, jobjectArray, jobject);
+
+/*
+ * Class:     vptree_VPTree
+ * Method:    VPT_addRebuild
+ * Signature: ([Ljava/lang/Object;)V
+ */
+JNIEXPORT void JNICALL Java_vptree_VPTree_VPT_1addRebuild
+  (JNIEnv *, jobject, jobjectArray);
 
 #ifdef __cplusplus
 }

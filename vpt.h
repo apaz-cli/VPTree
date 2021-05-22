@@ -65,8 +65,9 @@ typedef struct VPBranch VPBranch;
 struct PList;
 typedef struct PList PList;
 
-// This is a labeled union, containing either a branch in the tree, or a point list.
-struct VPNode {  // 40 with vpt_t = void*
+/* This is a labeled union, containing either a branch 
+   in the tree, or a point list. */
+struct VPNode {  /* 40 with vpt_t = void*. */
     char ulabel;
     union VPNodeUnion {
         struct VPBranch {
@@ -83,7 +84,7 @@ struct VPNode {  // 40 with vpt_t = void*
     } u;
 };
 
-// Linked list for node allocations, built from the front
+/* Linked list for node allocations, built from the front */
 struct NodeAllocs;
 typedef struct NodeAllocs NodeAllocs;
 struct NodeAllocs {
@@ -291,24 +292,24 @@ VPT_build(VPTree* vpt, vpt_t* data, size_t num_items,
 
     size_t i;
 
-    // Node to partition into left and right lists
+    /* Node to partition into left and right lists */
     VPNode* newnode;
     VPEntry *right_children, *left_children;
     size_t right_num_children, left_num_children;
 
-    // Hold information about the nodes that still need to be created, both on the left and right
+    /* Hold information about the nodes that still need to be created, both on the left and right */
     VPBuildStackFrame popped;
     VPBuildStackFrame leftstack[VPT_MAX_HEIGHT];
     VPBuildStackFrame rightstack[VPT_MAX_HEIGHT];
     size_t left_stacksize = 0, right_stacksize = 0;
 
-    // Pop the first item off the list of points. It will become the root.
+    /* Pop the first item off the list of points. It will become the root. */
     vpt_t sort_by = *data;
     data += 1;
     size_t num_entries = (num_items - 1);
     LOGs("Popped first item off list.");
 
-    // Copy the rest of the data into an array so it can be sorted and resorted as the tree is built
+    /* Copy the rest of the data into an array so it can be sorted and resorted as the tree is built */
     VPEntry* build_buffer;
     VPEntry* entry_list = build_buffer = (VPEntry*) malloc(num_entries * sizeof(VPEntry));
     if (!entry_list) return false;
@@ -317,7 +318,7 @@ VPT_build(VPTree* vpt, vpt_t* data, size_t num_items,
     }
     LOGs("Entry list copied.");
 
-    // Allocate some space to help with sorting.
+    /* Allocate some space to help with sorting. */
     VPEntry* scratch_space = (VPEntry*) malloc(num_entries * sizeof(VPEntry));
     if (!scratch_space) return false;
     LOGs("Allocated scratch space.");
@@ -984,8 +985,9 @@ VPT_add_rebuild(VPTree* vpt, vpt_t* to_add, size_t num_to_add) {
     if (!items) return false;
 
     // Reallocate the buffer to make space, then append the new items to the buffer.
-    items = (vpt_t*)realloc(items, (num_items+num_to_add) * sizeof(vpt_t));
-    if (!items) return false;
+    vpt_t* new_items = (vpt_t*)realloc(items, (num_items+num_to_add) * sizeof(vpt_t));
+    if (!new_items) return false;
+    items = new_items;
     for (size_t i = num_items, j = 0; i < (num_items + num_to_add); i++, j++) {
         items[i] = to_add[j];
     }
@@ -993,6 +995,7 @@ VPT_add_rebuild(VPTree* vpt, vpt_t* to_add, size_t num_to_add) {
     // Rebuild the tree using the buffer.
     bool success = VPT_build(vpt, items, (num_items+num_to_add), vpt->dist_fn, vpt->extra_data);
     if (!success) return false;
+    
 
     // Free the buffer because the tree doesn't store it.
     free(items);
